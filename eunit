@@ -1,0 +1,11 @@
+
+
+TEST=`basename $1`
+FILE=${TEST%.*}
+/usr/local/otp/bin/erlc $1 && /usr/local/otp/bin/erl -sname eunit@localhost -pa ../../*/ebin \
+-eval "R = case eunit:test($FILE, [verbose]) of ok -> 0; _ -> 1 end, timer:apply_after(100, erlang, halt, [R])."
+RET=$?
+rm $FILE.beam
+exit $RET
+
+   

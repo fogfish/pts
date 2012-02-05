@@ -1,0 +1,13 @@
+*.*~
+*.log
+*.status
+*.aux
+*.beam
+*.dump
+*.tag.gz
+*.tgz
+*.conf
+ebin/
+Makefile
+autom4te.cache/
+*.config

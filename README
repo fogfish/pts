@@ -1,0 +1,124 @@
+Process Term Storage (PTS)
+**************************
+
+Copyright (C) 2012, Dmitry Kolesnikov
+
+   This file is free documentation; unlimited permisions are give to copy, 
+distribute and modify the documentation. 
+
+
+   This library is free software; you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License, version 3.0
+as published by the Free Software Foundation.
+
+
+Introduction
+============
+
+   The library provides hashtable-like interface to manipulate data distributed 
+across Erlang processes.
+
+
+Compile and build
+=================
+
+   The library source code is available at git repository
+
+   git clone https://github.com/fogfish/pts.git
+   
+   Briefly, the shell command `./configure; make; make install' should 
+configure, build, and assembly distribution package. The following
+instructions are specific to this package; see the `INSTALL' file for
+instructions specific to GNU build tools. 
+
+   The `configure' shell script attempts to guess dependencies and system 
+configuration required to build library, the following build time dependencies exists:
+
+   --with-erlang={prefix_to_otp} supplied to `./configure' binds the library
+                                 with chosen Erlang runtime, if you have
+                                 multiple Erlang environments available at 
+                                 build machine
+   
+Use-cases
+=========
+
+   The library assumes existence of two type of processes `actors': 
+   
+   * data owner is an Erlang/OTP process that holds/ chunk of data and operates
+   its life-cycle.   
+   
+   * data consumer is process that leases data for transient operation
+
+   The contract between those actors are table and key, the table defines a data
+domain and key identifies a process that holds data. In other words, pts is like
+ets but each entry is kept is dedicated `data owner' process; the library just
+defines 
+   * an unified `data consumers' interface for data discovery and I/O
+   
+   * an unified asynchronous protocol for `data owners'
+
+Interface
+=========
+
+   Briefly, the sequence of operations for `data consume' is following; see the
+src/pts.erl file for detailed interface specification and/or example cache
+application.
+
+   %% create a new table and define a factory function
+   ok = pts:new(mytable, [{factory, fun my_entry_sup:create/2}]),
+   
+   %% put a value into process bound to mykey, if such process do not exists
+   %% the factory function is called to spawn a new process
+   ok = pts:put(mytable, mykey, "my value"),
+   
+   %%
+   %% read value from process
+   {ok, Value} = pts:get(mytable, mykey),
+   
+   %% clean up
+   pts:delete(mytable).
+   
+
+Protocol
+========
+   
+   Each `data owner' process has to be complient with asynchronous protocol: 
+   
+   1. Store data:
+   ----{pts_req_put, Pid, Key, Val}--->
+   <---{pts_rsp_put, Status}-----------
+
+   2. Read data
+   ----{pts_req_get, Pid, Key}-------->
+   <---{pts_rsp_get, {ok, Val}}--------
+   
+   3. Remove data
+   ----{pts_req_remove, Pid, Key}----->
+   <---{pts_rsp_remove, Status}--------
+   
+   see the examples/cache_entry.erl for example.
+   
+   
+Performance
+===========
+
+   Reference platform: MacMini, Lion Server, 2 GHz Intel Core i7, 4GB 1333 MHZ DDR3, erlang R15B
+   
+   pts is compared to ets for single `data consumer' over example cache 
+application. The 1KB data block(s) are used. 
+   
+   Write    10       100        1000        10000
+   --------------------------------------------------
+   pts    0.915 ms  6.116 ms   61.652 ms   610.025 ms
+   ets    0.173 ms  1.059 ms   11.193 ms   121.168 ms
+   
+   Read     10       100        1000        10000
+   --------------------------------------------------
+   pts    0.216 ms  1.424 ms   16.051 ms   135.569 ms
+   ets    0.081 ms  0.889 ms    8.038 ms    63.215 ms
+   
+   pts is 6x times slow for write due to process spawn; and 2x times slow for
+read. 
+
+
+
