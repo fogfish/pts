@@ -40,9 +40,14 @@
    delete/1,
    i/0,
    i/1,
+   % process registry
+   register/1,
+   unregister/1,
+   whereis/1,
+   registered/0,
    % process interface 
-   attach/2,
-   deattach/2
+   register/2,
+   unregister/2
 ]).
 
 
@@ -279,18 +284,91 @@ delete(Tab) ->
    end.   
    
 %%
+%% i() -> [Meta]
 %%
+%% return metadata of defined tables
 i() ->
    ets:tab2list(pts_table).
   
 %%
+%% i(Tab) -> {ok, Meta} | {error, Reason}
 %%
+%% return meta datafor given table
 i(Tab) ->
    case ets:lookup(pts_table, Tab) of
-      [T] -> T;
+      [T] -> {ok, T};
       _   -> {error, no_table}
    end.
    
+%%-----------------------------------------------------------------------------
+%%
+%% process registry
+%%
+%%-----------------------------------------------------------------------------   
+%%
+%% register(Uid, Pid) -> ok
+%%   Uid = term()
+%%   Pid = pid()
+%%
+%% Associates the name Uid with a valid Pid-only. Uid is any term
+%% Failure: badarg if Pid is not an existing, if Uid is already in use
+%%
+register(Uid) ->
+   case pts:whereis(Uid) of
+      undefined -> ets:insert(pts_reg, {Uid, self()}), ok;
+      _         -> throw(badarg)
+   end.
+
+
+%%
+%% unredister(Uid) -> ok
+%%   Uid = term()
+%%
+%% Removes the registered Uid associatation with a pid.
+%% Failure: badarg if Uid is not a registered name, Uri is assotiated 
+%% with invalid pid or if Uri is not complient http://tools.ietf.org/html/rfc3986.
+unregister(Uid) ->
+   case pts:whereis(Uid) of
+      undefined -> throw(badarg);
+      _         -> ets:delete(pts_reg, Uid), ok
+   end.
+   
+%%
+%% whereis(Uid) -> pid() | undefined
+%%    Uid = list() | tuple()
+%%
+%% Returns the pid or port identifier with the registered with Uid. 
+%% Returns undefined if the name is not registered. 
+whereis(Uid) ->
+   case ets:lookup(pts_reg, Uid) of
+      [{Uid, Pid}] ->
+         case is_process_alive(Pid) of
+            true  -> 
+               Pid;
+            false -> 
+               ets:delete(pts_reg, Uid),
+               undefined
+         end;
+      _            -> 
+         undefined
+   end.
+   
+%%
+%% registered() -> [Uid]
+%%
+%% Returns a list of names which have been registered using register/2.
+registered() ->   
+   lists:foldl(
+      fun({Uid, Pid}, Acc) ->
+         case is_process_alive(Pid) of
+            true  -> [Uid | Acc];
+            false -> ets:delete(pts_reg, Uid), Acc
+         end
+      end,
+      [],
+      ets:match_object(pts_reg, '_')
+   ).
+
 %%-----------------------------------------------------------------------------
 %%
 %% process interfaces
@@ -298,9 +376,9 @@ i(Tab) ->
 %%-----------------------------------------------------------------------------
 
 %%
-%% attach(Tab, Key) -> bool()
+%% register(Tab, Key) -> bool()
 %%
-attach(Tab, Key) when is_record(Tab, pts) ->
+register(Tab, Key) when is_record(Tab, pts) ->
    case key_to_pid(Tab, Key) of
       {error, not_found} -> 
          pid_to_key(Tab, Key, self()),
@@ -309,16 +387,16 @@ attach(Tab, Key) when is_record(Tab, pts) ->
          false
    end;
 
-attach(Tab, Key) when is_atom(Tab) ->    
+register(Tab, Key) when is_atom(Tab) ->    
    case ets:lookup(pts_table, Tab) of
-      [T] -> attach(T, Key);
+      [T] -> pts:register(T, Key);
       _   -> {error, no_table}
    end.   
 
 %%
-%% deattach(Tab, Key) -> bool()
+%% unregister(Tab, Key) -> bool()
 %%
-deattach(Tab, Key) when is_record(Tab, pts) ->
+unregister(Tab, Key) when is_record(Tab, pts) ->
    Self = self(),
    case key_to_pid(Tab, Key) of
       {error, not_found} -> 
@@ -330,9 +408,9 @@ deattach(Tab, Key) when is_record(Tab, pts) ->
          false
    end; 
 
-deattach(Tab, Key) when is_atom(Tab) ->    
+unregister(Tab, Key) when is_atom(Tab) ->    
    case ets:lookup(pts_table, Tab) of
-      [T] -> deattach(T, Key);
+      [T] -> pts:unregister(T, Key);
       _   -> {error, no_table}
    end.   
 

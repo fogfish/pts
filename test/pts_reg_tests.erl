@@ -16,30 +16,39 @@
 %%  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
--module(pts_app).
+-module(pts_reg_tests).
 -author(dmkolesnikov@gmail.com).
+-include_lib("eunit/include/eunit.hrl").
 
--export([
-   start/2,
-   stop/1
-]).
-
-
-start(_Type, _Args) ->
-   case pts_sup:start_link() of
-      {ok, Pid} ->
-         % meta data for pts tables
-         ets:new(pts_table, 
-            [set, public, named_table, {read_concurrency, true}, {keypos, 2}]
-         ),
-         % process registry
-         ets:new(pts_reg,
-            [set, public, named_table, {read_concurrency, true}]
-         ),
-         {ok, Pid};
-      Err ->
-         Err
-   end.
+start_test() ->
+   ok = application:start(pts).
    
-stop(_S) ->
-   ok.
+register_test() ->
+   ?assert(
+      ok =:= pts:register("mykey")
+   ).
+   
+register_twice_test() ->
+   ?assert(
+      badarg =:= (catch pts:register("mykey") )
+   ).
+   
+whereis_test() ->
+   ?assert(
+      self() =:= pts:whereis("mykey")
+   ).
+   
+registered_test() ->
+   ?assert(
+      ["mykey"] =:= pts:registered()
+   ).
+   
+unregister_test() ->
+   ?assert(
+      ok =:= pts:unregister("mykey")
+   ).
+   
+unregister_twice_test() ->
+   ?assert(
+      badarg =:= (catch pts:unregister("mykey"))
+   ).

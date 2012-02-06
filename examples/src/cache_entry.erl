@@ -81,7 +81,7 @@ handle_info({pts_req_remove, Pid, _Key}, S) ->
    {stop, normal, S}.
    
 terminate(_Reason, S) ->
-   pts:deattach(S#srv.tab, S#srv.key),
+   pts:unregister(S#srv.tab, S#srv.key),
    ok.
    
 code_change(_OldVsn, State, _Extra) ->
