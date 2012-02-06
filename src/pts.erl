@@ -36,6 +36,7 @@
    map/2,
    fold/3,
    % table management interface
+   new/1,
    new/2,
    delete/1,
    i/0,
@@ -55,6 +56,7 @@
 %% internal record, pts-table metadata
 -record(pts, {
    id,      % table id
+   ref,     % reference to keyspace
    type,    % type of the table
    keypos,  % 
    io,      % I/O operation (sync, async)
@@ -95,7 +97,7 @@ put(Tab, Key, Val) when is_record(Tab, pts) ->
       R  -> R
    end;   
 
-put(Tab, Key, Val) when is_atom(Tab) ->
+put(Tab, Key, Val) ->
    case ets:lookup(pts_table, Tab) of
       [T] -> put(T, Key, Val);
       _   -> {error, no_table}
@@ -138,7 +140,7 @@ has(Tab, Key) when is_record(Tab, pts) ->
       {ok, _Pid}         -> true   
    end;
    
-has(Tab, Key) when is_atom(Tab) ->
+has(Tab, Key) ->
    case ets:lookup(pts_table, Tab) of
       [T] -> has(T, Key);
       _   -> {error, no_table}
@@ -156,7 +158,7 @@ get(Tab, Key) when is_record(Tab, pts) ->
       Ret       -> Ret
    end;
 
-get(Tab, Key) when is_atom(Tab) ->
+get(Tab, Key) ->
    case ets:lookup(pts_table, Tab) of
       [T] -> get(T, Key);
       _   -> {error, no_table}
@@ -179,7 +181,7 @@ remove(Tab, Key) when is_record(Tab, pts) ->
          ok
    end; 
    
-remove(Tab, Key) when is_atom(Tab) ->
+remove(Tab, Key) ->
    case ets:lookup(pts_table, Tab) of
       [T] -> remove(T, Key);
       _   -> {error, no_table}
@@ -195,10 +197,10 @@ map(Tab, Fun) when is_record(Tab, pts) ->
          _         -> Fun({Key, undefined})
       end
    end,
-   Q = qlc:q([ Map(X) || X <- ets:table(Tab#pts.id)]),
+   Q = qlc:q([ Map(X) || X <- ets:table(Tab#pts.ref)]),
    qlc:e(Q);
    
-map(Tab, Fun) when is_atom(Tab) ->   
+map(Tab, Fun) ->   
    case ets:lookup(pts_table, Tab) of
       [T] -> map(T, Fun);
       _   -> {error, no_table}
@@ -214,10 +216,10 @@ fold(Tab, Acc, Fun) when is_record(Tab, pts) ->
          _         -> Fun({Key, undefined}, A)
       end
    end,
-   Q = qlc:q([ X || X <- ets:table(Tab#pts.id)]),
+   Q = qlc:q([ X || X <- ets:table(Tab#pts.ref)]),
    qlc:fold(Fold, Acc, Q);  
    
-fold(Tab, Acc, Fun) when is_atom(Tab) ->   
+fold(Tab, Acc, Fun) ->   
    case ets:lookup(pts_table, Tab) of
       [T] -> fold(T, Acc, Fun);
       _   -> {error, no_table}
@@ -237,17 +239,21 @@ fold(Tab, Acc, Fun) when is_atom(Tab) ->
 %%
 %% Creates a new named pts table and return
 %%
+new(Tab) ->
+   new(Tab, []).
+   
 new(Tab, Opts) ->
    case ets:lookup(pts_table, Tab) of
       [] -> 
          Access = is_opt(private, Opts, public),
          Type   = is_opt(set,     Opts, ordered_set),
          % define a keyspace
-         ets:new(Tab, 
-            [Access, Type, named_table, {read_concurrency, true}]
+         Ref    = ets:new(undefined, 
+            [Access, Type, {read_concurrency, true}]
          ),
          ets:insert(pts_table, #pts{
             id      = Tab,
+            ref     = Ref,
             type    = Type,
             keypos  = proplists:get_value(keypos, Opts, 1),
             io      = is_opt(async, Opts, sync),
@@ -274,9 +280,9 @@ delete(Tab) ->
                T#pts.timeout       -> A
             end
          end,
-         Q = qlc:q([ X || X <- ets:table(T#pts.id)]),
+         Q = qlc:q([ X || X <- ets:table(T#pts.ref)]),
          qlc:fold(Fold, [], Q),
-         ets:delete(Tab),
+         ets:delete(T#pts.ref),
          ets:delete(pts_table, T#pts.id),
          ok;
       _   ->
@@ -387,7 +393,7 @@ register(Tab, Key) when is_record(Tab, pts) ->
          false
    end;
 
-register(Tab, Key) when is_atom(Tab) ->    
+register(Tab, Key) ->    
    case ets:lookup(pts_table, Tab) of
       [T] -> pts:register(T, Key);
       _   -> {error, no_table}
@@ -408,7 +414,7 @@ unregister(Tab, Key) when is_record(Tab, pts) ->
          false
    end; 
 
-unregister(Tab, Key) when is_atom(Tab) ->    
+unregister(Tab, Key) ->    
    case ets:lookup(pts_table, Tab) of
       [T] -> pts:unregister(T, Key);
       _   -> {error, no_table}
@@ -468,13 +474,13 @@ prot_remove(Tab, Pid, Key) ->
 %% maps key into process
 key_to_pid(T, Key) ->
    Hash = T#pts.hash,
-   case ets:lookup(T#pts.id, Hash(Key)) of
+   case ets:lookup(T#pts.ref, Hash(Key)) of
       [{_, Key, Pid}] -> 
          case is_process_alive(Pid) of
             true  -> 
                {ok, Pid};
             false -> 
-               ets:delete(T#pts.id, Hash(Key)),
+               ets:delete(T#pts.ref, Hash(Key)),
                {error, not_found}
          end;
       _          -> {error, not_found}
@@ -484,12 +490,12 @@ key_to_pid(T, Key) ->
 %% assotiates pid with key value
 pid_to_key(T, Key, undefined) ->
    Hash = T#pts.hash,
-   ets:delete(T#pts.id, Hash(Key)),
+   ets:delete(T#pts.ref, Hash(Key)),
    ok;
 
 pid_to_key(T, Key, Pid) ->
    Hash = T#pts.hash,
-   ets:insert(T#pts.id, {Hash(Key), Key, Pid}),
+   ets:insert(T#pts.ref, {Hash(Key), Key, Pid}),
    ok.
    
 %%

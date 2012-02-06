@@ -31,20 +31,30 @@ pts_tbl_mgmt_test_() ->
       setup,
       fun() -> application:start(pts) end,
       [
-         {"Create table", fun create_tbl/0},
-         {"Drop table",  fun drop_tbl/0}
+         {"Create table", fun create_tbl1/0},
+         {"Drop table",  fun drop_tbl1/0},
+         {"Create table (tuple)", fun create_tbl2/0},
+         {"Drop table (tuple)",  fun drop_tbl2/0}
       ]
    }.
 
-create_tbl() ->
+create_tbl1() ->
    ok = pts:new(test, []),
    Hash = fun erlang:phash2/1,
-   [{pts, test, ordered_set, 1, sync, 5000, Hash, undefined}] = pts:i().
+   [{pts, test, _, ordered_set, 1, sync, 5000, Hash, undefined}] = pts:i().
    
-drop_tbl() ->
+drop_tbl1() ->
    ok = pts:delete(test),
    [] = pts:i().
    
+create_tbl2() ->
+   ok = pts:new({test, a}, []),
+   Hash = fun erlang:phash2/1,
+   [{pts, {test, a}, _, ordered_set, 1, sync, 5000, Hash, undefined}] = pts:i().
+   
+drop_tbl2() ->
+   ok = pts:delete({test, a}),
+   [] = pts:i().   
 
 %%-----------------------------------------------------------------------------
 %%
@@ -80,6 +90,17 @@ pts_dat_mgmt_test_() ->
                   )}
                end
             }
+         ]),
+         pts:new({test, a}, [
+            {factory, 
+               fun(_,_)-> 
+                  {ok, spawn(
+                     fun() -> 
+                        Loop(Loop, {nil, nil})
+                     end
+                  )}
+               end
+            }
          ])
       end,
       [
@@ -88,7 +109,13 @@ pts_dat_mgmt_test_() ->
          {"Get", fun get/0},
          {"Remove", fun remove/0},
          {"Map", fun map/0},
-         {"Fold", fun fold/0}
+         {"Fold", fun fold/0},
+         {"Put (tuple)", fun tput/0},
+         {"Has (tuple)", fun thas/0},
+         {"Get (tuple)", fun tget/0},
+         {"Remove (tuple)", fun tremove/0},
+         {"Map (tuple)", fun tmap/0},
+         {"Fold (tuple)", fun tfold/0}
       ]
    }.   
    
@@ -130,3 +157,43 @@ fold() ->
       0,
       lists:seq(1,5)
    ).   
+   
+   
+tput() ->
+   ok = pts:put({test, a}, key1, value).
+   
+thas() ->
+   true  = pts:has({test, a}, key1),
+   false = pts:has({test, a}, key2).
+   
+tget() ->
+   {ok, value} = pts:get({test, a}, key1),
+   {error, not_found} = pts:get({test, a}, key2).
+   
+tremove() ->
+   ok = pts:remove({test, a}, key1),
+   false = pts:has({test, a}, key1),
+   {error, not_found} = pts:get({test, a}, key1).
+
+tmap() ->
+   lists:foreach(
+      fun(X) -> ok = pts:put({test, a}, X, X) end,
+      lists:seq(1,5)
+   ),
+   M = pts:map({test, a}, fun({K,V}) -> K*V end),
+   lists:foreach(
+      fun(X) -> true = lists:member(X*X, M) end, 
+      lists:seq(1,5)
+   ).
+   
+tfold() ->
+   lists:foreach(
+      fun(X) -> ok = pts:put({test, a}, X, X) end,
+      lists:seq(1,5)
+   ),
+   M = pts:fold({test, a}, 0, fun({K,V}, A) -> A + K*V end),
+   M = lists:foldl(
+      fun(X, A) -> A + X*X end,
+      0,
+      lists:seq(1,5)
+   ).      
