@@ -2520,6 +2520,9 @@ if test "${with_erlang+set}" = set; then :
 fi
 
 
+   if test -f conf2lib ; then
+      CONF2LIB="\$(top_builddir)/conf2lib"
+   else
 
 
 
@@ -2572,6 +2575,12 @@ done
       :
    else
       :
+   fi
+
+
+      cp $CONF2LIB conf2lib
+      chmod 777 conf2lib
+      CONF2LIB="\$(top_builddir)/conf2lib"
    fi
 
 
@@ -2712,6 +2721,7 @@ $as_echo_n "checking for pkgliberldir... " >&6; }
 $as_echo "$pkgliberldir" >&6; }
    __report_dirs__="$__report_dirs__
    pkgliberldir:\t $pkgliberldir"
+
 
 
 
