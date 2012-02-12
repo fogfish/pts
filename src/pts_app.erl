@@ -28,13 +28,10 @@
 start(_Type, _Args) ->
    case pts_sup:start_link() of
       {ok, Pid} ->
+         ok = pts_ns:start(),
          % meta data for pts tables
          ets:new(pts_table, 
             [set, public, named_table, {read_concurrency, true}, {keypos, 2}]
-         ),
-         % process registry
-         ets:new(pts_reg,
-            [set, public, named_table, {read_concurrency, true}]
          ),
          {ok, Pid};
       Err ->

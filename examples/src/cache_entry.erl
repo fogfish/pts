@@ -45,6 +45,7 @@ start_link(Tab, Key) ->
   gen_server:start_link(?MODULE, [Tab, Key], []).
   
 init([Tab, Key]) ->
+   pts:attach(Tab, Key),
    {ok, 
       #srv{
          tab=Tab, 
@@ -64,24 +65,24 @@ handle_cast(_Req, State) ->
 handle_info(timeout, S) ->
    {stop, normal, S};
 
-handle_info({pts_req_put, Pid, _Key, Val}, S) ->  
+handle_info({pts_req, Pid, {put, _Key, Val}}, S) ->  
    TTL = case is_list(Val) of
       true  -> proplists:get_value(ttl, Val, ?TTL_DEF);
       false -> ?TTL_DEF 
    end,
-   Pid ! {pts_rsp_put, ok},
+   Pid ! {pts_rsp, ok},
    {noreply, S#srv{ttl = TTL, val = Val}, TTL};
 
-handle_info({pts_req_get, Pid, _Key}, S) ->   
-   Pid ! {pts_rsp_get, {ok, S#srv.val}},
+handle_info({pts_req, Pid, {get, _Key}}, S) ->   
+   Pid ! {pts_rsp, {ok, S#srv.val}},
    {noreply, S, S#srv.ttl};
 
-handle_info({pts_req_remove, Pid, _Key}, S) ->   
-   Pid ! {pts_rsp_remove, ok},
+handle_info({pts_req, Pid, {remove, _Key}}, S) ->   
+   Pid ! {pts_rsp, ok},
    {stop, normal, S}.
    
 terminate(_Reason, S) ->
-   pts:unregister(S#srv.tab, S#srv.key),
+   pts:detach(S#srv.tab, S#srv.key),
    ok.
    
 code_change(_OldVsn, State, _Extra) ->

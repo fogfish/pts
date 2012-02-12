@@ -16,39 +16,35 @@
 %%  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
--module(pts_reg_tests).
+-module(pts_ns_tests).
 -author(dmkolesnikov@gmail.com).
 -include_lib("eunit/include/eunit.hrl").
 
 start_test() ->
-   ok = application:start(pts).
+   ok = pts_ns:start().
    
 register_test() ->
    ?assert(
-      ok =:= pts:register("mykey")
-   ).
-   
-register_twice_test() ->
-   ?assert(
-      badarg =:= (catch pts:register("mykey") )
+      ok =:= pts_ns:register("mykey", self())
    ).
    
 whereis_test() ->
    ?assert(
-      self() =:= pts:whereis("mykey")
+      self() =:= pts_ns:whereis("mykey")
    ).
    
-registered_test() ->
+map_test() ->
    ?assert(
-      ["mykey"] =:= pts:registered()
+      ["mykey"] =:= pts_ns:map(fun({Uid, _}) -> Uid end)
+   ).
+
+fold_test() ->
+   ?assert(
+      ["mykey"] =:= pts_ns:fold([], fun({Uid, _}, A) -> [Uid | A] end)
    ).
    
 unregister_test() ->
    ?assert(
-      ok =:= pts:unregister("mykey")
+      ok =:= pts_ns:unregister("mykey")
    ).
    
-unregister_twice_test() ->
-   ?assert(
-      badarg =:= (catch pts:unregister("mykey"))
-   ).

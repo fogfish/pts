@@ -18,6 +18,6 @@
 #
 TESTS_ENVIRONMENT = $(top_builddir)/eunit
 TESTS  = pts_tests.erl 
-TESTS += pts_reg_tests.erl 
+TESTS += pts_ns_tests.erl 
 
 @MAKE_GNUWEB@

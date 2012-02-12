@@ -40,20 +40,18 @@ pts_tbl_mgmt_test_() ->
 
 create_tbl1() ->
    ok = pts:new(test, []),
-   Hash = fun erlang:phash2/1,
-   [{pts, test, _, ordered_set, 1, sync, 5000, Hash, undefined}] = pts:i().
+   [_] = pts:i().
    
 drop_tbl1() ->
-   ok = pts:delete(test),
+   ok = pts:drop(test),
    [] = pts:i().
    
 create_tbl2() ->
    ok = pts:new({test, a}, []),
-   Hash = fun erlang:phash2/1,
-   [{pts, {test, a}, _, ordered_set, 1, sync, 5000, Hash, undefined}] = pts:i().
+   [_] = pts:i().
    
 drop_tbl2() ->
-   ok = pts:delete({test, a}),
+   ok = pts:drop({test, a}),
    [] = pts:i().   
 
 %%-----------------------------------------------------------------------------
@@ -66,26 +64,27 @@ pts_dat_mgmt_test_() ->
       setup,
       fun() -> 
          application:start(pts),
-         Loop = fun(L, S) ->
+         Loop = fun(L, {Tab, Key, Val0} = S) ->
             receive
-               {pts_req_put, Pid, Key, Val} -> 
-                  Pid ! {pts_rsp_put, ok},
-                  L(L, {Key, Val});
-               {pts_req_get, Pid, Key} ->
-                  {_, Val} = S,
-                  Pid ! {pts_rsp_get, {ok, Val}},
-                  L(L, S);
-               {pts_req_remove, Pid, Key} ->
-                  Pid ! {pts_rsp_remove, ok},
-                  L(L, {nil,nil})
+               {pts_req, Pid, {put, Key, Val}} -> 
+                  pts:attach(Tab, Key),
+                  Pid ! {pts_rsp, ok},
+                  L(L, {Tab, Key, Val});
+               {pts_req, Pid, {get, Key}} ->
+                  Pid ! {pts_rsp, {ok, Val0}},
+                  L(L, {Tab, Key, Val0});
+               {pts_req, Pid, {remove, Key}} ->
+                  pts:detach(Tab, Key),
+                  Pid ! {pts_rsp, ok}
             end
          end,
          pts:new(test, [
             {factory, 
-               fun(_,_)-> 
+               fun(Tab,Key)-> 
                   {ok, spawn(
                      fun() -> 
-                        Loop(Loop, {nil, nil})
+                        pts:attach(Tab, Key),
+                        Loop(Loop, {Tab, Key, nil})
                      end
                   )}
                end
@@ -93,10 +92,11 @@ pts_dat_mgmt_test_() ->
          ]),
          pts:new({test, a}, [
             {factory, 
-               fun(_,_)-> 
+               fun(Tab,Key)-> 
                   {ok, spawn(
                      fun() -> 
-                        Loop(Loop, {nil, nil})
+                        pts:attach(Tab, Key),
+                        Loop(Loop, {Tab, Key, nil})
                      end
                   )}
                end

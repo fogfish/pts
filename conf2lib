@@ -1,5 +1,4 @@
 #!/usr/local/macports/bin/perl
-use lib '/usr/lib/gnuweb';
 #
 # GNU Web: conf2lib - converts config.h into syntax complient 
 # with non-native runtimes
@@ -14,7 +13,7 @@ use lib '/usr/lib/gnuweb';
 #
 ###############################################################################
 {
-   package runtime::SModule;
+   package SModule;
 
    sub new
    {
@@ -55,7 +54,7 @@ use lib '/usr/lib/gnuweb';
 }
 
 {
-   package runtime::SClass;
+   package SClass;
    
    sub new
    {
@@ -85,7 +84,6 @@ use lib '/usr/lib/gnuweb';
 ###############################################################################
 {
    package EappModule;
-   use runtime::SModule;
    our @ISA = qw(SModule);
    
    sub toString
@@ -145,7 +143,6 @@ $env
 
 {
    package EappClass;
-   use runtime::SClass;
    our @ISA = qw(SClass);
    
    #

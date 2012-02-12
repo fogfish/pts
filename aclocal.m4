@@ -1110,13 +1110,13 @@ CONFED = \\
 	-e 's|@PACKAGE[@]|\$(PACKAGE)|g' \\
 	-e 's|@VERSION[@]|\$(VERSION)|g' 
 
-tarball: \$(distdir)-bin.tgz
+tarball: \$(distdir).build.tgz
 
-\$(distdir)-bin.tgz:
+\$(distdir).build.tgz:
 	\$(AM_V_TAR)rm -f -R /tmp/make/\$(distdir)
 	@\$(MAKE) install DESTDIR=/tmp/make/\$(distdir) > /dev/null
-	@cd /tmp/make/\$(distdir);tar --no-recursion -czvf \$(distdir)-bin.tgz \`find . -type f -print\` > /dev/null
-	@mv /tmp/make/\$(distdir)/\$(distdir)-bin.tgz \$(top_builddir)
+	@cd /tmp/make/\$(distdir);tar --no-recursion -czvf \$(distdir).build.tgz \`find . -type f -print\` > /dev/null
+	@mv /tmp/make/\$(distdir)/\$(distdir).build.tgz \$(top_builddir)
 	@rm -f -R /tmp/make/\$(distdir)	
 
    " >> Makefile.gnuweb
