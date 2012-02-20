@@ -66,16 +66,16 @@ pts_dat_mgmt_test_() ->
          application:start(pts),
          Loop = fun(L, {Tab, Key, Val0} = S) ->
             receive
-               {pts_req, Pid, {put, Key, Val}} -> 
+               {pts, Tx, {put, Key, Val}} -> 
                   pts:attach(Tab, Key),
-                  Pid ! {pts_rsp, ok},
+                  pts:notify(Tx, ok),
                   L(L, {Tab, Key, Val});
-               {pts_req, Pid, {get, Key}} ->
-                  Pid ! {pts_rsp, {ok, Val0}},
+               {pts, Tx, {get, Key}} ->
+                  pts:notify(Tx, {ok, Val0}),
                   L(L, {Tab, Key, Val0});
-               {pts_req, Pid, {remove, Key}} ->
+               {pts, Tx, {remove, Key}} ->
                   pts:detach(Tab, Key),
-                  Pid ! {pts_rsp, ok}
+                  pts:notify(Tx, ok)
             end
          end,
          pts:new(test, [
@@ -140,7 +140,7 @@ map() ->
       fun(X) -> ok = pts:put(test, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map(test, fun({K,V}) -> K*V end),
+   M = pts:map(test, fun({K,V}) -> K*V() end),
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -151,7 +151,7 @@ fold() ->
       fun(X) -> ok = pts:put(test, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(test, 0, fun({K,V}, A) -> A + K*V end),
+   M = pts:fold(test, 0, fun({K,V}, A) -> A + K*V() end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,
@@ -180,7 +180,7 @@ tmap() ->
       fun(X) -> ok = pts:put({test, a}, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map({test, a}, fun({K,V}) -> K*V end),
+   M = pts:map({test, a}, fun({K,V}) -> K*V() end),
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -191,7 +191,7 @@ tfold() ->
       fun(X) -> ok = pts:put({test, a}, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold({test, a}, 0, fun({K,V}, A) -> A + K*V end),
+   M = pts:fold({test, a}, 0, fun({K,V}, A) -> A + K*V() end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,

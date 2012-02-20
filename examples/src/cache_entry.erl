@@ -65,20 +65,20 @@ handle_cast(_Req, State) ->
 handle_info(timeout, S) ->
    {stop, normal, S};
 
-handle_info({pts_req, Pid, {put, _Key, Val}}, S) ->  
+handle_info({pts, Tx, {put, _Key, Val}}, S) ->  
    TTL = case is_list(Val) of
       true  -> proplists:get_value(ttl, Val, ?TTL_DEF);
       false -> ?TTL_DEF 
    end,
-   Pid ! {pts_rsp, ok},
+   pts:notify(Tx, ok),
    {noreply, S#srv{ttl = TTL, val = Val}, TTL};
 
-handle_info({pts_req, Pid, {get, _Key}}, S) ->   
-   Pid ! {pts_rsp, {ok, S#srv.val}},
+handle_info({pts, Tx, {get, _Key}}, S) ->   
+   pts:notify(Tx, {ok, S#srv.val}),
    {noreply, S, S#srv.ttl};
 
-handle_info({pts_req, Pid, {remove, _Key}}, S) ->   
-   Pid ! {pts_rsp, ok},
+handle_info({pts, Tx, {remove, _Key}}, S) ->   
+   pts:notify(Tx, ok),
    {stop, normal, S}.
    
 terminate(_Reason, S) ->

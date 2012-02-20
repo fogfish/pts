@@ -37,7 +37,8 @@
    map/1,
    map/2,
    fold/2,
-   fold/3
+   fold/3,
+   send/2
 ]).
 
 %%
@@ -169,6 +170,17 @@ fold(Ns, Acc0, Fun) ->
       qlc:q([ X || X <- ets:table(Ns)])
    ).      
    
+%%
+%% send(Pid, Msg) -> ok | {error, ...}
+%%
+%% send async message
+send(undefined, Msg) ->
+   {error, no_process};
+send(Pid, Msg) ->   
+   case is_process_alive(Pid) of
+      true  -> erlang:send(Pid, Msg);
+      false -> {error, no_process}
+   end.   
    
    
 %%-----------------------------------------------------------------------------

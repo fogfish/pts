@@ -44,7 +44,8 @@
    fold/3,
    % process interface 
    attach/2,
-   detach/2
+   detach/2,
+   notify/2
 ]).
 
 
@@ -270,10 +271,8 @@ remove(Tab, Key) ->
 map(#pts{ns = Ns} = Tab, Fun) ->
    pts_ns:map(Ns, 
       fun({Key, Pid}) ->
-         case prot_get(Tab, Pid, Key) of
-            {ok, Val} -> Fun({Key, Val});
-            _         -> Fun({Key, undefined})
-         end
+         Get = fun() -> {ok, Val} = prot_get(Tab, Pid, Key), Val end,
+         Fun({Key, Get})
       end
    );
    
@@ -289,10 +288,8 @@ map(Tab, Fun) ->
 fold(#pts{ns = Ns} = Tab, Acc, Fun) ->
    pts_ns:fold(Ns, Acc,
       fun({Key, Pid}, A) ->
-         case prot_get(Tab, Pid, Key) of
-            {ok, Val} -> Fun({Key, Val}, A);
-            _         -> Fun({Key, undefined}, A)
-         end
+         Get = fun() -> {ok, Val} = prot_get(Tab, Pid, Key), Val end,
+         Fun({Key, Get}, A)
       end
    );
    
@@ -339,6 +336,11 @@ detach(Tab, Key) ->
       _   -> {error, no_table}
    end.
    
+%%
+%% 
+%% notify transaction
+notify({Pid, Ref}, Rsp) ->
+   erlang:send(Pid, {pts, Ref, Rsp}).   
    
 %%-----------------------------------------------------------------------------
 %%
@@ -349,36 +351,36 @@ detach(Tab, Key) ->
 %%
 %% 
 prot_put(#pts{async = true}, Pid, Key, Val) ->
-   erlang:send(Pid, {pts_req, self(), {put, Key, Val}}),
+   erlang:send(Pid, {pts, self(), {put, Key, Val}}),
    ok;
 
 prot_put(#pts{timeout = T}, Pid, Key, Val) ->
-   prot_sync_call(Pid, {pts_req, self(), {put, Key, Val}}, T).
+   prot_sync_call(Pid, {put, Key, Val}, T).
 
 %%
 %%
 prot_get(#pts{timeout = T}, Pid, Key) ->
-   prot_sync_call(Pid, {pts_req, self(), {get, Key}}, T).  
+   prot_sync_call(Pid, {get, Key}, T).  
    
 %%
 %%
 prot_remove(#pts{async = true}, Pid, Key) ->
-   erlang:send(Pid, {pts_req, self(), {remove, Key}}),
+   erlang:send(Pid, {pts, self(), {remove, Key}}),
    ok;
 
 prot_remove(#pts{timeout = T}, Pid, Key) ->
-   prot_sync_call(Pid, {pts_req, self(), {remove, Key}}, T).
+   prot_sync_call(Pid, {remove, Key}, T).
 
 %%
 %% executes synchronous protocol operation
 prot_sync_call(Pid, Req, Timeout) ->
    try erlang:monitor(process, Pid) of
       Ref ->
-         catch erlang:send(Pid, Req, [noconnect]),
+         catch erlang:send(Pid, {pts, {self(), Ref}, Req}, [noconnect]),
          receive
             {'DOWN', Ref, _, _, Reason} -> 
                {error, Reason};
-            {pts_rsp, Response}  -> 
+            {pts, Ref, Response}  -> 
                erlang:demonitor(Ref, [flush]),
                Response
          after Timeout ->
@@ -393,3 +395,6 @@ prot_sync_call(Pid, Req, Timeout) ->
    catch
       error:_ -> {error, system}
    end.   
+   
+   
+   
