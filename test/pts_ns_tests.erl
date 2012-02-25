@@ -26,25 +26,39 @@ start_test() ->
 register_test() ->
    ?assert(
       ok =:= pts_ns:register("mykey", self())
+   ),
+   ?assert(
+      ok =:= pts_ns:register(mykey, self())
    ).
    
 whereis_test() ->
    ?assert(
       self() =:= pts_ns:whereis("mykey")
+   ),
+   ?assert(
+      self() =:= pts_ns:whereis(mykey)
    ).
+   
+whatis_test() ->
+   Keys = pts_ns:whatis(self()),
+   ?assert(lists:member(mykey, Keys)),
+   ?assert(lists:member("mykey", Keys)).
    
 map_test() ->
    ?assert(
-      ["mykey"] =:= pts_ns:map(fun({Uid, _}) -> Uid end)
+      [mykey, "mykey"] =:= pts_ns:map(fun({Uid, _}) -> Uid end)
    ).
 
 fold_test() ->
    ?assert(
-      ["mykey"] =:= pts_ns:fold([], fun({Uid, _}, A) -> [Uid | A] end)
+      ["mykey", mykey] =:= pts_ns:fold([], fun({Uid, _}, A) -> [Uid | A] end)
    ).
    
 unregister_test() ->
    ?assert(
       ok =:= pts_ns:unregister("mykey")
+   ),
+   ?assert(
+      ok =:= pts_ns:unregister(mykey)
    ).
    

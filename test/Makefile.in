@@ -163,7 +163,7 @@ top_srcdir = @top_srcdir@
 #  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 #
 TESTS_ENVIRONMENT = $(top_builddir)/eunit
-TESTS = pts_tests.erl pts_ns_tests.erl
+TESTS = pts_tests.erl pts_ns_tests.erl pts_supervisor_tests.erl
 all: all-am
 
 .SUFFIXES:

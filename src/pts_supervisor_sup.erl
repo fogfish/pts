@@ -16,15 +16,18 @@
 %%  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
--module(pts_sup).
+-module(pts_supervisor_sup).
 -behaviour(supervisor).
 -author(dmkolesnikov@gmail.com).
 
 -export([
    start_link/0,
-   init/1
+   init/1,
+   create/3
 ]).
 
+create(Tab, Ns, Factory) ->
+   supervisor:start_child(?MODULE, [Tab, Ns, Factory]).
 
 start_link() ->
    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
@@ -33,15 +36,15 @@ start_link() ->
 init([]) ->
    {ok,
       {
-         {one_for_one, 4, 1800},
+         {simple_one_for_one, 4, 1800},
          [{
-            pts_supervisor_sup,
+            pts_supervisor,
             {
-               pts_supervisor_sup,
+               pts_supervisor,
                start_link,
                []
             },
-            permanent, brutal_kill, supervisor, dynamic
+            temporary, brutal_kill, worker, dynamic
          }]
       }
    }.

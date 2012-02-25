@@ -59,7 +59,7 @@
    readonly, % write operations are disabled
    supervise,% processes supervised
    timeout,  % process timeout operation
-   factory   % factory function (if factory is not defined 
+   factory   % factory function  
 }).
 
 %%-----------------------------------------------------------------------------
@@ -82,13 +82,14 @@ new(Tab) ->
 new(Tab, Opts) ->
    case ets:lookup(pts_table, Tab) of
       [] -> 
+         Ns = pts_ns:new(Tab, Opts),
          ets:insert(pts_table, #pts{
             id       = Tab,
-            ns       = pts_ns:new(Tab, Opts),
+            ns       = Ns,
             keypos   = proplists:get_value(keypos, Opts, 1),
             async    = proplists:is_defined(async, Opts),
             readonly = proplists:is_defined(readonly, Opts),
-            supervise= proplists:is_defined(supervise, Opts),
+            supervise= supervisor(Tab, Ns, Opts),
             timeout  = proplists:get_value(timeout, Opts, 5000),
             factory  = proplists:get_value(factory, Opts)
          }),
@@ -309,11 +310,12 @@ fold(Tab, Acc, Fun) ->
 %%
 %% attach(Tab, Key) -> ok
 %%
-attach(#pts{ns = Ns}, Key) ->
-   pts_ns:register(Ns, Key, self());
-
-attach(Tab, Key) when is_atom(Tab) ->
-   pts_ns:register(Tab, Key, self());
+attach(#pts{ns = Ns, supervise = Sup}, Key) ->
+   pts_ns:register(Ns, Key, self()),
+   case is_pid(Sup) of
+      true  -> pts_supervisor:supervise(Sup, self());
+      false -> ok
+   end;
    
 attach(Tab, Key) ->
    case ets:lookup(pts_table, Tab) of
@@ -384,12 +386,7 @@ prot_sync_call(Pid, Req, Timeout) ->
                erlang:demonitor(Ref, [flush]),
                Response
          after Timeout ->
-            erlang:demonitor(Ref),
-            % consume possible down msg
-            receive
-			   {'DOWN', Ref, _, _, _} -> true
-		      after 0 -> true
-		      end,
+            erlang:demonitor(Ref, [flush]),
 		      {error, timeout}
          end
    catch
@@ -397,4 +394,18 @@ prot_sync_call(Pid, Req, Timeout) ->
    end.   
    
    
-   
+%%
+%% spawn entity supervisor
+supervisor(Tab, Ns, Opts) ->
+   case proplists:is_defined(supervise, Opts) of
+      true ->
+         {ok, Pid} = pts_supervisor_sup:create(
+            Tab,
+            Ns, 
+            proplists:get_value(respawn, Opts)
+         ),
+         Pid;
+      false ->
+         undefined
+   end.
+         

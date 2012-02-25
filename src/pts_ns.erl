@@ -34,6 +34,8 @@
    unregister/2,
    whereis/1,
    whereis/2,
+   whatis/1,
+   whatis/2,
    map/1,
    map/2,
    fold/2,
@@ -130,7 +132,7 @@ unregister(Ns, Uid) ->
    ok.
 
 %%
-%% whereis(Uid) -> pid() | undefined
+%% whereis(Ns, Uid) -> pid() | undefined
 %%
 %% Returns the Pid assotiated with Uid. 
 %% Returns undefined if the name is not registered.   
@@ -142,12 +144,25 @@ whereis(Ns, Uid) ->
       [{Uid, Pid}] ->
          case is_process_alive(Pid) of
             true  -> Pid;
-            false -> ets:delete(Ns, Uid), undefined
+            false -> undefined
          end;
       _            -> 
          undefined
    end.   
  
+%%
+%% whatis(Ns, Pid) -> [Uid]
+%%
+%% Returns the Uid assotiated with Pid, (reversive lookup)
+%% Returns undefined if the Pid not found
+whatis(Pid) ->
+   pts_ns:whatis(?DEFAULT_NS, Pid).
+   
+whatis(Ns, Pid) ->
+   ets:select(Ns, [{{'$1', Pid}, [], ['$1']}]).
+
+
+   
 %%
 %% map(Ns, Fun) -> [...]
 %%   Fun = fun({Uid, Pid}) -> ...
