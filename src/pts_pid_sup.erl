@@ -19,13 +19,13 @@
 %%  @description
 %%     Monitors entity processes and re-spawns then on crash   
 %%
--module(pts_supervisor).
+-module(pts_pid_sup).
 -behaviour(gen_server).
 -author(dmkolesnikov@gmail.com).
 
 -export([
-   start_link/3,
-   supervise/2,
+   start_link/0,
+   supervise/1,
    % gen_server
    init/1,
    handle_call/3,
@@ -47,18 +47,17 @@
 %% start_link(Ns) - {ok, Pid} | {error, ...}
 %%
 %% start an entity supervisour 
-start_link(Tab, Ns, Factory) when is_function(Factory) ->
-   gen_server:start_link(?MODULE, [Tab, Ns, Factory], []).
+start_link() ->
+   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
    
-init([Tab, Ns, Factory]) ->
-   {ok, {Tab, Ns, Factory}}.
-   
+init([]) ->
+   {ok, []}.
 
 %%
 %%  
 %%
-supervise(Sup, Entry) when is_pid(Entry) ->
-   gen_server:call(Sup, {supervise, Entry}).
+supervise(Entry) when is_pid(Entry) ->
+   gen_server:call(?MODULE, {supervise, Entry}).
    
 
 %% 
@@ -81,15 +80,20 @@ handle_info({'DOWN', _Ref, process, Pid, shutdown}, S) ->
    % not a crash, manual termination
    ?DEBUG([{shutdown, Pid}]),
    {noreply, S};
-handle_info({'DOWN', _Ref, process, Pid, _}, {Tab, Ns, Factory} = S) -> 
+handle_info({'DOWN', _Ref, process, Pid, _}, S) ->
    % crash, re-spawn
-   Keys = pts_ns:whatis(Ns, Pid),
-   ?DEBUG([respawn, {pid, Pid}, {keys, Keys}]),
-   case catch(Factory({respawn, Tab, Keys})) of
-      {ok, Entry} -> erlang:monitor(process, Entry);
-      _           -> ok
-   end,
-   {noreply, S};
+   try 
+      Keys = pts_ns:whatis(Pid),
+      ?DEBUG([recovery, {pid, Pid}, {keys, Keys}]),
+      [{Ns, _} | _ ] = Keys,
+      F = pts:i(Ns, factory),
+      {ok, Entry} = F({recovery, Keys}),
+      erlang:monitor(process, Entry),
+      {noreply, S}
+   catch
+      _ -> 
+        {noreply, S}
+   end; 
 handle_info(_Msg, S) ->
    {noreply, S}.
    

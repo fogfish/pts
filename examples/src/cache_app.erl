@@ -30,7 +30,7 @@ start(_Type, _Args) ->
       {ok, Pid} ->
          % meta data for pts tables
          ok = pts:new(cache, [
-            {factory, fun cache_entry_sup:create/2}
+            {factory, fun cache_entry_sup:create/1}
          ]),
          {ok, Pid};
       Err ->

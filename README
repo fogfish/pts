@@ -106,6 +106,20 @@ Performance
    
    pts is compared to ets for single `data consumer' over example cache 
 application. The 1KB data block(s) are used. 
+
+   version 0.3.x
+
+   Write    10       100        1000        10000
+   --------------------------------------------------
+   pts    1.591 ms  7.913 ms   65.434 ms   638.072 ms
+   ets    0.173 ms  1.232 ms   11.010 ms   127.469 ms
+   
+   Read     10       100        1000        10000
+   --------------------------------------------------
+   pts    0.280 ms  1.785 ms   17.089 ms   190.390 ms
+   ets    0.135 ms  0.879 ms    7.839 ms    61.522 ms
+
+   version 0.2.x
    
    Write    10       100        1000        10000
    --------------------------------------------------

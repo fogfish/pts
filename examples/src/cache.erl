@@ -39,7 +39,6 @@ b(N) ->
    Set = dataset(N),
    [
       {[b(pts, write, Set), b(ets, write, Set)]},
-      {[b(pts, seq_read, Set), b(ets, seq_read, Set)]},
       {[b(pts, read, Set), b(ets, read, Set)]}
    ].
   
@@ -50,7 +49,7 @@ b(pts, write, {_, Val, Seq}) ->
       fun() ->
          lists:foreach(
             fun(X) ->
-               ok = pts:put(cache, gen_key(X), Val)
+               ok = pts:put({cache, gen_key(X)}, Val)
             end,
             Seq
          )
@@ -73,43 +72,13 @@ b(ets, write, {_, Val, Seq}) ->
    ),
    {ets, write, Tio / 1000};
    
-   
-b(pts, seq_read, {_N, _, Seq}) ->   
-   {Tio,  _} = timer:tc(
-      fun() ->
-         lists:foreach(
-            fun(X) -> 
-               %% NOTE: {key, 1312}, {key, 2040} cannot be found
-               pts:get(cache, gen_key(X))
-            end,
-            Seq
-         )
-      end,
-      []
-   ),
-   {pts, seq_read, Tio / 1000};
-
-b(ets, seq_read, {_N, _, Seq}) ->   
-   {Tio,  _} = timer:tc(
-      fun() ->
-         lists:foreach(
-            fun(X) ->
-               ets:lookup(ets_cache, gen_key(X))
-            end,
-            Seq
-         )
-      end,
-      []
-   ),
-   {ets, seq_read, Tio / 1000};   
-   
 b(pts, read, {_N, _, Seq}) ->   
    Seq1 = shuffle(Seq),
    {Tio,  _} = timer:tc(
       fun() ->
          lists:foreach(
             fun(X) ->
-               pts:get(cache, gen_key(X))
+               pts:get({cache, gen_key(X)})
             end,
             Seq1
          )

@@ -21,8 +21,7 @@ SUBDIRS = test examples
 pts_SRC = \
    src/pts.erl \
    src/pts_ns.erl \
-   src/pts_supervisor.erl \
-   src/pts_supervisor_sup.erl \
+   src/pts_pid_sup.erl \
    src/pts_sup.erl \
    src/pts_app.erl
 
@@ -35,7 +34,7 @@ EXTRA_DIST = $(pts_SRC)
 
 
 run-example:
-	$(ERL) -pa ./ebin -pa ./examples/ebin
+	$(ERL) -pa ./ebin -pa ./examples/ebin +P 90000000
 
 @MAKE_GNUWEB@
 

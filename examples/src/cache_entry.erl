@@ -21,7 +21,7 @@
 -author(dmkolesnikov@gmail.com).
 
 -export([
-   start_link/2,
+   start_link/1,
    %% gen_server
    init/1, 
    handle_call/3,
@@ -33,7 +33,6 @@
 
 -record(srv, {
    ttl,       % time-to-live in seconds
-   tab,       % table
    key,       % key
    val        % value
 }).
@@ -41,14 +40,13 @@
 
 %%
 %%
-start_link(Tab, Key) ->
-  gen_server:start_link(?MODULE, [Tab, Key], []).
+start_link(Key) ->
+  gen_server:start_link(?MODULE, [Key], []).
   
-init([Tab, Key]) ->
-   pts:attach(Tab, Key),
+init([{create, Key}]) ->
+   pts:attach(Key),
    {ok, 
       #srv{
-         tab=Tab, 
          key=Key
       }
    }. 
@@ -82,7 +80,7 @@ handle_info({pts, Tx, {remove, _Key}}, S) ->
    {stop, normal, S}.
    
 terminate(_Reason, S) ->
-   pts:detach(S#srv.tab, S#srv.key),
+   pts:detach(S#srv.key),
    ok.
    
 code_change(_OldVsn, State, _Extra) ->

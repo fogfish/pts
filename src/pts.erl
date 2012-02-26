@@ -35,16 +35,15 @@
    i/1,
    i/2,
    % data management interface
-   put/3,
    put/2,
-   has/2,
-   get/2,
-   remove/2,
+   has/1,
+   get/1,
+   remove/1,
    map/2,
    fold/3,
    % process interface 
-   attach/2,
-   detach/2,
+   attach/1,
+   detach/1,
    notify/2
 ]).
 
@@ -52,8 +51,7 @@
 %%
 %% internal record, pts-table metadata
 -record(pts, {
-   id,       % table id
-   ns,       % reference to namespace
+   ns,       % table id / namesppace
    keypos,   % position of key element within tuple (default 1)
    async,    % asynchronous I/O
    readonly, % write operations are disabled
@@ -69,27 +67,26 @@
 %%-----------------------------------------------------------------------------
 
 %%
-%% new(Name, Opts) -> ok
-%%    Name = atom()
+%% new(Ns, Opts) -> ok
+%%    Name = term()
 %%    Opts = [Option]
-%%    Opt  = Type | Access | Write | Factory | Hash
+%%    Opt  = {keypos,  integer()} | async | readonly | supervise |
+%%           {timeout, integer()} | {factory fun()}
 %%
-%% Creates a new named pts table and return
+%% Creates a new namespace
 %%
-new(Tab) ->
-   new(Tab, []).
+new(Ns) ->
+   new(Ns, []).
    
-new(Tab, Opts) ->
-   case ets:lookup(pts_table, Tab) of
+new(Ns, Opts) ->
+   case ets:lookup(pts_table, Ns) of
       [] -> 
-         Ns = pts_ns:new(Tab, Opts),
          ets:insert(pts_table, #pts{
-            id       = Tab,
             ns       = Ns,
             keypos   = proplists:get_value(keypos, Opts, 1),
             async    = proplists:is_defined(async, Opts),
             readonly = proplists:is_defined(readonly, Opts),
-            supervise= supervisor(Tab, Ns, Opts),
+            supervise= proplists:is_defined(supervise, Opts),
             timeout  = proplists:get_value(timeout, Opts, 5000),
             factory  = proplists:get_value(factory, Opts)
          }),
@@ -99,13 +96,12 @@ new(Tab, Opts) ->
    end.
 
 %%
-%% delete(Tab) -> ok
+%% delete(Ns) -> ok
 %%
-drop(Tab) ->
-   case ets:lookup(pts_table, Tab) of
+drop(Ns) ->
+   case ets:lookup(pts_table, Ns) of
       [T] -> 
-         pts_ns:drop(T#pts.ns),
-         ets:delete(pts_table, T#pts.id),
+         ets:delete(pts_table, T#pts.ns),
          ok;
       _   ->
          ok
@@ -122,8 +118,8 @@ i() ->
 %% i(Tab) -> {ok, Meta} | {error, Reason}
 %%
 %% return meta datafor given table
-i(Tab) ->
-   case ets:lookup(pts_table, Tab) of
+i(Ns) ->
+   case ets:lookup(pts_table, Ns) of
       [T] -> {ok, T};
       _   -> {error, no_table}
    end.
@@ -131,13 +127,15 @@ i(Tab) ->
 %%
 %% i(Tab, Property) -> {ok, Meta} | {error, Reason}
 %%
-%% return meta datafor given table
-i(#pts{ns = Ns}, ns) ->
-   Ns;
+%% return meta data for given table
+i(#pts{ns = Val}, ns) ->
+   Val;
+i(#pts{factory = Val}, factory) ->
+   Val;
 i(#pts{}, _) ->
-   {error, not_supported};
-i(Tab, Prop) ->
-   case ets:lookup(pts_table, Tab) of
+   throw(badarg);
+i(Ns, Prop) ->
+   case ets:lookup(pts_table, Ns) of
       [T] -> i(T, Prop);
       _   -> {error, no_table}
    end.
@@ -150,97 +148,41 @@ i(Tab, Prop) ->
 %%-----------------------------------------------------------------------------
 
 %%
-%% put(Tab, Key, Val) -> ok | {error, Reason} 
+%% put(Key, Val) -> ok | {error, Reason} 
 %%
 %% Inserts the value object into table and assotiates its with the key. 
 %% If tables is set or ordered_set and the key of inserted value matches
 %% any existed key, the old assotiation is replace.
 %%
-put(#pts{readonly = true}, _Key, _Val) ->
-   {error, readonly};
-put(#pts{factory = undefined}, _Key, _Val) ->
-   {error, readonly};
-put(#pts{id = Id, ns = Ns, factory = F} = Tab, Key, Val) ->
-   % resolve id of managing process
-   Pid = case pts_ns:whereis(Ns, Key) of
-      undefined ->
-         {ok, Pid0} = F(Id, Key),
-         Pid0;
-      Pid0 ->
-         Pid0
-   end,
-   prot_put(Tab, Pid, Key, Val);   
-
-put(Tab, Key, Val) ->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> pts:put(T, Key, Val);
-      _   -> {error, no_table}
-   end.
-
-%%
-%% put(Tab, Object) -> ok | {error, Reason}
-%%
-%% Insert the tuple object or list of tuples and assotiates with key
-%%
-put(Tab, Object) when is_list(Object)->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> 
-         lists:foreach(
-            fun(Obj) ->
-               pts:put(T, erlang:element(Tab#pts.keypos, Obj), Obj)
-            end,
-            Object
-         ),
-         ok;
-      _   -> 
-         {error, no_table}
-   end;
-
-put(Tab, Object) when is_tuple(Object)->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> pts:put(T, erlang:element(Tab#pts.keypos, Object), Object);
-      _   -> {error, no_table}
+put({Ns, _} = Key, Val) ->
+   case ets:lookup(pts_table, Ns) of
+      [T] -> do_put(T, Key, Val);
+      _   -> {error, no_namespace}
    end.
    
-   
 %%
-%% has(Tab, Key) -> bool()
+%% has(Key) -> bool()
 %%
 %% Check if the key exists in the table
 %%
-has(#pts{ns = Ns}, Key) ->
-   case pts_ns:whereis(Ns, Key) of
+has({_,_} = Key) ->
+   case pts_ns:whereis(Key) of
       undefined -> false;
       _         -> true
-   end;
-   
-has(Tab, Key) when is_atom(Tab) ->
-   case pts_ns:whereis(Tab, Key) of
-      undefined -> false;
-      _         -> true
-   end;
-   
-has(Tab, Key) ->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> pts:has(T, Key);
-      _   -> {error, no_table}
    end.
 
-
 %%
-%% get(Tab, Key) -> {ok, Val} | {error, Reason}
+%% get(Key) -> {ok, Val} | {error, Reason}
 %%
 %% return a value assotiated with key
 %%
-get(#pts{ns = Ns} = Tab, Key) ->
-   case pts_ns:whereis(Ns, Key) of
-      undefined -> {error, not_found};
-      Pid       -> prot_get(Tab, Pid, Key)
-   end;
-
-get(Tab, Key) ->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> get(T, Key);
+get({Ns, _} = Key) ->
+   case ets:lookup(pts_table, Ns) of
+      [T] -> 
+         case pts_ns:whereis(Key) of
+            undefined -> {error, not_found};
+            Pid       -> prot_get(T, Pid, Key)
+         end;
       _   -> {error, no_table}
    end.
    
@@ -250,19 +192,9 @@ get(Tab, Key) ->
 %%
 %% removes the value 
 %%
-remove(#pts{readonly = true}, _Key) ->
-   {error, readonly};
-remove(#pts{factory = undefined}, _Key) ->
-   {error, readonly};
-remove(#pts{ns = Ns} = Tab, Key) ->
-   case pts_ns:whereis(Ns, Key) of
-      undefined -> ok;
-      Pid       -> prot_remove(Tab, Pid, Key)
-   end;
-   
-remove(Tab, Key) ->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> remove(T, Key);
+remove({Ns, _} = Key) ->
+   case ets:lookup(pts_table, Ns) of
+      [T] -> do_remove(T, Key);
       _   -> {error, no_table}
    end.
    
@@ -277,8 +209,8 @@ map(#pts{ns = Ns} = Tab, Fun) ->
       end
    );
    
-map(Tab, Fun) ->   
-   case ets:lookup(pts_table, Tab) of
+map(Ns, Fun) ->   
+   case ets:lookup(pts_table, Ns) of
       [T] -> map(T, Fun);
       _   -> {error, no_table}
    end.  
@@ -294,8 +226,8 @@ fold(#pts{ns = Ns} = Tab, Acc, Fun) ->
       end
    );
    
-fold(Tab, Acc, Fun) ->   
-   case ets:lookup(pts_table, Tab) of
+fold(Ns, Acc, Fun) ->   
+   case ets:lookup(pts_table, Ns) of
       [T] -> fold(T, Acc, Fun);
       _   -> {error, no_table}
    end.   
@@ -310,31 +242,23 @@ fold(Tab, Acc, Fun) ->
 %%
 %% attach(Tab, Key) -> ok
 %%
-attach(#pts{ns = Ns, supervise = Sup}, Key) ->
-   pts_ns:register(Ns, Key, self()),
-   case is_pid(Sup) of
-      true  -> pts_supervisor:supervise(Sup, self());
-      false -> ok
-   end;
-   
-attach(Tab, Key) ->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> pts:attach(T, Key);
+attach({Ns, _} = Key) ->
+   case ets:lookup(pts_table, Ns) of
+      [T] -> 
+         pts_ns:register(Key, self()),
+         case T#pts.supervise of
+            false -> ok;
+            true  -> pts_pid_sup:supervise(self())
+         end;
       _   -> {error, no_table}
    end.
    
 %%
 %% attach(Tab, Key) -> ok
 %%
-detach(#pts{ns = Ns}, Key) ->
-   pts_ns:unregister(Ns, Key);
-
-detach(Tab, Key) when is_atom(Tab) ->
-   pts_ns:unregister(Tab, Key);
-   
-detach(Tab, Key) ->
-   case ets:lookup(pts_table, Tab) of
-      [T] -> pts:detach(T, Key);
+detach({Ns, _} = Key) ->
+   case ets:lookup(pts_table, Ns) of
+      [_] -> pts_ns:unregister(Key);
       _   -> {error, no_table}
    end.
    
@@ -349,6 +273,31 @@ notify({Pid, Ref}, Rsp) ->
 %% private
 %%
 %%-----------------------------------------------------------------------------
+
+do_put(#pts{readonly = true}, _Key, _Val) ->
+   {error, readonly};
+do_put(#pts{factory = undefined}, _Key, _Val) ->
+   {error, readonly};
+do_put(#pts{factory = F} = Tab, Key, Val) ->
+   % resolve id of managing process
+   Pid = case pts_ns:whereis(Key) of
+      undefined ->
+         {ok, Pid0} = F({create, Key}),
+         Pid0;
+      Pid0 ->
+         Pid0
+   end,
+   prot_put(Tab, Pid, Key, Val).  
+
+do_remove(#pts{readonly = true}, _Key) ->
+   {error, readonly};
+do_remove(#pts{factory = undefined}, _Key) ->
+   {error, readonly};
+do_remove(#pts{} = Tab, Key) ->
+   case pts_ns:whereis(Key) of
+      undefined -> ok;
+      Pid       -> prot_remove(Tab, Pid, Key)
+   end.
 
 %%
 %% 
@@ -392,20 +341,5 @@ prot_sync_call(Pid, Req, Timeout) ->
    catch
       error:_ -> {error, system}
    end.   
-   
-   
-%%
-%% spawn entity supervisor
-supervisor(Tab, Ns, Opts) ->
-   case proplists:is_defined(supervise, Opts) of
-      true ->
-         {ok, Pid} = pts_supervisor_sup:create(
-            Tab,
-            Ns, 
-            proplists:get_value(respawn, Opts)
-         ),
-         Pid;
-      false ->
-         undefined
-   end.
+ 
          

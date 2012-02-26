@@ -20,6 +20,31 @@
 -author(dmkolesnikov@gmail.com).
 -include_lib("eunit/include/eunit.hrl").
 
+%%-----------------------------------------------------------------------------
+%%
+%% test process
+%%
+%%-----------------------------------------------------------------------------
+proc(Key0, Val0) ->
+   receive
+      {pts, Tx, {put, Key, Val}} ->
+         pts:notify(Tx, ok),
+         proc(Key, Val);
+      {pts, Tx, {get, Key}} ->
+         pts:notify(Tx, {ok, Val0}),
+         proc(Key0, Val0);
+      {pts, Tx, {remove, Key}} ->
+         pts:detach(Key),
+         pts:notify(Tx,  ok)
+   end.
+
+factory({create, Key}) ->
+   {ok, spawn(
+      fun() ->
+         pts:attach(Key),
+         proc(Key, nil)
+      end
+   )}.   
 
 %%-----------------------------------------------------------------------------
 %%
@@ -29,7 +54,8 @@
 pts_tbl_mgmt_test_() ->
    {
       setup,
-      fun() -> application:start(pts) end,
+      fun()  -> application:start(pts) end,
+      fun(_) -> application:stop(pts) end,
       [
          {"Create table", fun create_tbl1/0},
          {"Drop table",  fun drop_tbl1/0},
@@ -59,48 +85,20 @@ drop_tbl2() ->
 %% data management
 %%
 %%-----------------------------------------------------------------------------
+-define(KEY, {key, 1}).
+-define(NS1,  test).
+-define(NS2,  {test, 1}).
+
 pts_dat_mgmt_test_() ->
    {
       setup,
       fun() -> 
          application:start(pts),
-         Loop = fun(L, {Tab, Key, Val0} = S) ->
-            receive
-               {pts, Tx, {put, Key, Val}} -> 
-                  pts:attach(Tab, Key),
-                  pts:notify(Tx, ok),
-                  L(L, {Tab, Key, Val});
-               {pts, Tx, {get, Key}} ->
-                  pts:notify(Tx, {ok, Val0}),
-                  L(L, {Tab, Key, Val0});
-               {pts, Tx, {remove, Key}} ->
-                  pts:detach(Tab, Key),
-                  pts:notify(Tx, ok)
-            end
-         end,
-         pts:new(test, [
-            {factory, 
-               fun(Tab,Key)-> 
-                  {ok, spawn(
-                     fun() -> 
-                        pts:attach(Tab, Key),
-                        Loop(Loop, {Tab, Key, nil})
-                     end
-                  )}
-               end
-            }
+         pts:new(?NS1, [
+            {factory, fun factory/1}
          ]),
-         pts:new({test, a}, [
-            {factory, 
-               fun(Tab,Key)-> 
-                  {ok, spawn(
-                     fun() -> 
-                        pts:attach(Tab, Key),
-                        Loop(Loop, {Tab, Key, nil})
-                     end
-                  )}
-               end
-            }
+         pts:new(?NS2, [
+            {factory, fun factory/1}
          ])
       end,
       [
@@ -120,27 +118,27 @@ pts_dat_mgmt_test_() ->
    }.   
    
 put() ->
-   ok = pts:put(test, key1, value).
+   ok = pts:put({?NS1, ?KEY}, value).
    
 has() ->
-   true  = pts:has(test, key1),
-   false = pts:has(test, key2).
+   true  = pts:has({?NS1, ?KEY}),
+   false = pts:has({?NS1, key}).
    
 get() ->
-   {ok, value} = pts:get(test, key1),
-   {error, not_found} = pts:get(test, key2).
+   {ok, value} = pts:get({?NS1, ?KEY}),
+   {error, not_found} = pts:get({?NS1, key}).
    
 remove() ->
-   ok = pts:remove(test, key1),
-   false = pts:has(test, key1),
-   {error, not_found} = pts:get(test, key1).
+   ok = pts:remove({?NS1, ?KEY}),
+   false = pts:has({?NS1, ?KEY}),
+   {error, not_found} = pts:get({?NS1, ?KEY}).
 
 map() ->
    lists:foreach(
-      fun(X) -> ok = pts:put(test, X, X) end,
+      fun(X) -> ok = pts:put({?NS1, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map(test, fun({K,V}) -> K*V() end),
+   M = pts:map(?NS1, fun({K,V}) -> K*V() end), 
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -148,10 +146,10 @@ map() ->
    
 fold() ->
    lists:foreach(
-      fun(X) -> ok = pts:put(test, X, X) end,
+      fun(X) -> ok = pts:put({?NS1, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(test, 0, fun({K,V}, A) -> A + K*V() end),
+   M = pts:fold(?NS1, 0, fun({K,V}, A) -> A + K*V() end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,
@@ -160,27 +158,27 @@ fold() ->
    
    
 tput() ->
-   ok = pts:put({test, a}, key1, value).
+   ok = pts:put({?NS2, ?KEY}, value).
    
 thas() ->
-   true  = pts:has({test, a}, key1),
-   false = pts:has({test, a}, key2).
+   true  = pts:has({?NS2, ?KEY}),
+   false = pts:has({?NS2,  key}).
    
 tget() ->
-   {ok, value} = pts:get({test, a}, key1),
-   {error, not_found} = pts:get({test, a}, key2).
+   {ok, value} = pts:get({?NS2, ?KEY}),
+   {error, not_found} = pts:get({?NS2, key}).
    
 tremove() ->
-   ok = pts:remove({test, a}, key1),
-   false = pts:has({test, a}, key1),
-   {error, not_found} = pts:get({test, a}, key1).
+   ok = pts:remove({?NS2, ?KEY}),
+   false = pts:has({?NS2, ?KEY}),
+   {error, not_found} = pts:get({?NS2, ?KEY}).
 
 tmap() ->
    lists:foreach(
-      fun(X) -> ok = pts:put({test, a}, X, X) end,
+      fun(X) -> ok = pts:put({?NS2, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map({test, a}, fun({K,V}) -> K*V() end),
+   M = pts:map(?NS2, fun({K,V}) -> K*V() end),
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -188,10 +186,10 @@ tmap() ->
    
 tfold() ->
    lists:foreach(
-      fun(X) -> ok = pts:put({test, a}, X, X) end,
+      fun(X) -> ok = pts:put({?NS2, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold({test, a}, 0, fun({K,V}, A) -> A + K*V() end),
+   M = pts:fold(?NS2, 0, fun({K,V}, A) -> A + K*V() end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,

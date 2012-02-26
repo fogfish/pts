@@ -16,44 +16,46 @@
 %%  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
--module(pts_supervisor_tests).
+-module(pts_pid_sup_tests).
 -author(dmkolesnikov@gmail.com).
 -include_lib("eunit/include/eunit.hrl").
 
 
-proc(Tab, Key0, Val0) ->
+proc(Key0, Val0) ->
    receive
       {pts, Tx, {put, Key, Val}} ->
          pts:notify(Tx, ok),
-         proc(Tab, Key, Val);
+         proc(Key, Val);
       {pts, Tx, {get, Key}} ->
          pts:notify(Tx, {ok, Val0}),
-         proc(Tab, Key0, Val0);
+         proc(Key0, Val0);
       {pts, Tx, {remove, Key}} ->
          pts:notify(Tx, ok);
       _ ->
          throw(badarg)
    end.
 
-factory({respawn, Tab, [Key]}) ->
-   factory(Tab, Key).
-factory(Tab, Key) ->
+factory({recovery, [Key]}) ->
+   factory({create, Key});
+factory({create, Key}) ->
    {ok, spawn(
       fun() ->
-         pts:attach(Tab, Key),
-         proc(Tab, Key, nil)
+         pts:attach(Key),
+         proc(Key, nil)
       end
    )}.
+   
+-define(NS1, test).
+-define(KEY, {key, 1}).
    
 pts_supervisor_test_() ->
    {
       setup,
       fun()  ->
          application:start(pts),
-         pts:new(test, [
+         pts:new(?NS1, [
             {supervise, true},
-            {respawn, fun factory/1},
-            {factory, fun factory/2}
+            {factory, fun factory/1}
          ])
       end,
       fun(_) ->
@@ -67,13 +69,12 @@ pts_supervisor_test_() ->
    
    
 put() ->
-   ok = pts:put(test, key1, value).
+   ok = pts:put({?NS1, ?KEY}, value).
    
 respawn() ->
-   Pid = pts_ns:whereis(test, key1),
+   {ok, value} = pts:get({?NS1, ?KEY}),
+   Pid = pts_ns:whereis({?NS1, ?KEY}),
    Pid ! error,
-   R = pts:get(test, key1),
-   error_logger:error_report([{got, R}]),
    timer:sleep(500),
-   {ok, nil} = pts:get(test, key1).
+   {ok, nil} = pts:get({?NS1, ?KEY}).
    

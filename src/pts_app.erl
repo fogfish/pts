@@ -31,7 +31,7 @@ start(_Type, _Args) ->
          ok = pts_ns:start(),
          % meta data for pts tables
          ets:new(pts_table, 
-            [set, public, named_table, {read_concurrency, true}, {keypos, 2}]
+            [ordered_set, public, named_table, {read_concurrency, true}, {keypos, 2}]
          ),
          {ok, Pid};
       Err ->

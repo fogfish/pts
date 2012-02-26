@@ -23,11 +23,11 @@
 -export([
    start_link/0,
    init/1,
-   create/2
+   create/1
 ]).
 
-create(Tab, Key) ->
-   supervisor:start_child(?MODULE, [Tab, Key]).
+create(Req) ->
+   supervisor:start_child(?MODULE, [Req]).
 
 start_link() ->
    supervisor:start_link({local, ?MODULE}, ?MODULE, []).

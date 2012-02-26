@@ -23,11 +23,13 @@
 -author(dmkolesnikov@gmail.com).
 -include_lib("stdlib/include/qlc.hrl").
 
+%%
+%% Max Theoretical scalability demand at 32-bit arch is 268435456 entries
+%%
+
 -export([
    start/0,
-   new/1,
-   new/2,
-   drop/1,
+   register/1,
    register/2,
    register/3,
    unregister/1,
@@ -39,8 +41,7 @@
    map/1,
    map/2,
    fold/2,
-   fold/3,
-   send/2
+   fold/3
 ]).
 
 %%
@@ -53,15 +54,125 @@
 
 %%
 %% default Namespace
--define(DEFAULT_NS, pts_local_ns).
+-define(REGISTRY, pts_local).
 
 %%
 %%
 %%
 start() ->
-   pts_ns:new(?DEFAULT_NS),
+   new(?REGISTRY),
    ok.
 
+
+
+%%
+%% register(Uid, Pid) -> ok
+%%   Ns  = atom()
+%%   Uid = term()
+%%
+%% Associates Uid with a Pid of current process.
+%% Failes with badarg is assotiation exists and assotaited process is alive
+%%
+register(Uid) ->
+   pts_ns:register(Uid, self()).
+register(Ns,  Uid, Pid) ->
+   pts_ns:register({Ns, Uid}, Pid).
+register(Uid, Pid) ->
+   case ets:insert_new(?REGISTRY, {Uid, Pid}) of
+      true  -> 
+         ok;
+      false ->
+         % entry exists but insert is allowed if assotiated process is dead
+         case pts_ns:whereis(Uid) of
+            undefined -> 
+               ets:insert(?REGISTRY, {Uid, Pid}),
+               ok;
+            Pid1 ->
+               if
+                  Pid  =:= Pid1 -> ok;
+                  true          -> throw(badarg)
+               end
+         end
+   end.
+
+
+%%
+%% unregister(Ns, Uid) -> ok
+%%
+%% Removes the registered Uid associatation with a Pid.
+unregister(Ns, Uid) ->
+   pts_ns:unregister({Ns, Uid}).
+unregister(Uid) ->
+   ets:delete(?REGISTRY, Uid),
+   ok.
+
+%%
+%% whereis(Ns, Uid) -> pid() | undefined
+%%
+%% Returns the Pid assotiated with Uid. 
+%% Returns undefined if the name is not registered.   
+whereis(Ns, Uid) ->
+   pts_ns:whereis({Ns, Uid}).
+   
+whereis(Uid) ->
+   case ets:lookup(?REGISTRY, Uid) of
+      [{Uid, Pid}] ->
+         case is_process_alive(Pid) of
+            true  -> Pid;
+            false -> undefined
+         end;
+      _            -> 
+         undefined
+   end.   
+ 
+%%
+%% whatis(Ns, Pid) -> [Uid]
+%%
+%% Returns the Uid assotiated with Pid, (reversive lookup)
+%% Returns undefined if the Pid not found
+whatis(Pid) ->
+   ets:select(?REGISTRY, [{{'$1', Pid}, [], ['$1']}]).
+   
+whatis(Ns, Pid) ->
+   ets:select(?REGISTRY, [{{{Ns, '$1'}, Pid}, [], [{Ns, '$1'}]}]).
+   
+%%
+%% map(Ns, Fun) -> [...]
+%%   Fun = fun({Uid, Pid}) -> ...
+map(Fun) ->
+   qlc:e(
+      qlc:q([ Fun(X) || X <- ets:table(?REGISTRY)])
+   ).   
+   
+map(Ns0, Fun) ->
+   qlc:e(
+      qlc:q([ 
+         Fun({X, Pid}) 
+         || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0
+      ])
+   ).
+   
+%%
+%% foldl(Tab, Acc0, Fun) -> Acc
+%%
+fold(Acc0, Fun) ->
+   qlc:fold(Fun, Acc0, 
+      qlc:q([ X || X <- ets:table(?REGISTRY)])
+   ).
+
+fold(Ns0, Acc0, Fun) ->
+   qlc:fold(Fun, Acc0, 
+      qlc:q([ 
+         {X, Pid} || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0
+      ])
+   ).      
+      
+   
+%%-----------------------------------------------------------------------------
+%%
+%% private
+%%
+%%-----------------------------------------------------------------------------
 
 %%
 %% new(Ns, Opts) -> Ref
@@ -89,119 +200,5 @@ new(_Ns, Opts) ->
 drop(Ns) ->
    ets:delete(Ns),
    ok.
-
-
-%%
-%% register(Ns, Uid) -> ok
-%%   Ns  = atom()
-%%   Uid = term()
-%%
-%% Associates Uid with a Pid of current process.
-%% Failes with badarg is assotiation exists and assotaited process is alive
-%%
-register(Uid, Pid) ->
-   pts_ns:register(?DEFAULT_NS, Uid, Pid).
-
-register(Ns, Uid, Pid) ->  
-   case ets:insert_new(Ns, {Uid, Pid}) of
-      true  -> 
-         ok;
-      false ->
-         % insert is allowed if assotiated process is dead
-         case pts_ns:whereis(Ns, Uid) of
-            undefined -> 
-               ets:insert(Ns, {Uid, Pid}),
-               ok;
-            Pid1 ->
-               if
-                  Pid  =:= Pid1 -> ok;
-                  true          -> throw(badarg)
-               end
-         end
-   end.
-   
-%%
-%% unregister(Ns, Uid) -> ok
-%%
-%% Removes the registered Uid associatation with a Pid.
-unregister(Uid) ->
-   pts_ns:unregister(?DEFAULT_NS, Uid).
-   
-unregister(Ns, Uid) ->
-   ets:delete(Ns, Uid), 
-   ok.
-
-%%
-%% whereis(Ns, Uid) -> pid() | undefined
-%%
-%% Returns the Pid assotiated with Uid. 
-%% Returns undefined if the name is not registered.   
-whereis(Uid) ->
-   pts_ns:whereis(?DEFAULT_NS, Uid).
-   
-whereis(Ns, Uid) ->
-   case ets:lookup(Ns, Uid) of
-      [{Uid, Pid}] ->
-         case is_process_alive(Pid) of
-            true  -> Pid;
-            false -> undefined
-         end;
-      _            -> 
-         undefined
-   end.   
- 
-%%
-%% whatis(Ns, Pid) -> [Uid]
-%%
-%% Returns the Uid assotiated with Pid, (reversive lookup)
-%% Returns undefined if the Pid not found
-whatis(Pid) ->
-   pts_ns:whatis(?DEFAULT_NS, Pid).
-   
-whatis(Ns, Pid) ->
-   ets:select(Ns, [{{'$1', Pid}, [], ['$1']}]).
-
-
-   
-%%
-%% map(Ns, Fun) -> [...]
-%%   Fun = fun({Uid, Pid}) -> ...
-map(Fun) ->
-   pts_ns:map(?DEFAULT_NS, Fun).
-   
-map(Ns, Fun) ->
-   qlc:e(
-      qlc:q([ Fun(X) || X <- ets:table(Ns)])
-   ).
-   
-%%
-%% foldl(Tab, Acc0, Fun) -> Acc
-%%
-fold(Acc, Fun) ->
-   pts_ns:fold(?DEFAULT_NS, Acc, Fun).
-
-fold(Ns, Acc0, Fun) ->
-   qlc:fold(Fun, Acc0, 
-      qlc:q([ X || X <- ets:table(Ns)])
-   ).      
-   
-%%
-%% send(Pid, Msg) -> ok | {error, ...}
-%%
-%% send async message
-send(undefined, Msg) ->
-   {error, no_process};
-send(Pid, Msg) ->   
-   case is_process_alive(Pid) of
-      true  -> erlang:send(Pid, Msg);
-      false -> {error, no_process}
-   end.   
-   
-   
-%%-----------------------------------------------------------------------------
-%%
-%% private
-%%
-%%-----------------------------------------------------------------------------
 
    
