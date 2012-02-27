@@ -138,7 +138,7 @@ map() ->
       fun(X) -> ok = pts:put({?NS1, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map(?NS1, fun({K,V}) -> K*V() end), 
+   M = pts:map(?NS1, fun({{_,K},V}) -> K*V() end), 
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -149,7 +149,7 @@ fold() ->
       fun(X) -> ok = pts:put({?NS1, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(?NS1, 0, fun({K,V}, A) -> A + K*V() end),
+   M = pts:fold(?NS1, 0, fun({{_,K},V}, A) -> A + K*V() end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,
@@ -178,7 +178,7 @@ tmap() ->
       fun(X) -> ok = pts:put({?NS2, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map(?NS2, fun({K,V}) -> K*V() end),
+   M = pts:map(?NS2, fun({{_,K},V}) -> K*V() end),
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -189,7 +189,7 @@ tfold() ->
       fun(X) -> ok = pts:put({?NS2, X}, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(?NS2, 0, fun({K,V}, A) -> A + K*V() end),
+   M = pts:fold(?NS2, 0, fun({{_,K},V}, A) -> A + K*V() end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,

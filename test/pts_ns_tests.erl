@@ -81,7 +81,7 @@ map_test() ->
    ?assert(not lists:member(?KEY3, Keys)),
    ?assert(not lists:member({?NS2, ?KEY2}, Keys)),
    ?assert(
-      [?KEY2] =:= pts_ns:map(?NS1, fun({Uid, _}) -> Uid end)
+      [{?NS1, ?KEY2}] =:= pts_ns:map(?NS1, fun({Uid, _}) -> Uid end)
    ).
    
 fold_test() ->   
@@ -92,7 +92,7 @@ fold_test() ->
    ?assert(not lists:member(?KEY3, Keys)),
    ?assert(not lists:member({?NS2, ?KEY2}, Keys)),
    ?assert(
-      [?KEY2] =:= pts_ns:fold(?NS1, [], fun({Uid, _}, A) -> [Uid | A] end)
+      [{?NS1, ?KEY2}] =:= pts_ns:fold(?NS1, [], fun({Uid, _}, A) -> [Uid | A] end)
    ).
    
 unregister_test() ->

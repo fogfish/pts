@@ -147,7 +147,7 @@ map(Fun) ->
 map(Ns0, Fun) ->
    qlc:e(
       qlc:q([ 
-         Fun({X, Pid}) 
+         Fun({{Ns, X}, Pid}) 
          || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0
       ])
    ).
@@ -163,7 +163,7 @@ fold(Acc0, Fun) ->
 fold(Ns0, Acc0, Fun) ->
    qlc:fold(Fun, Acc0, 
       qlc:q([ 
-         {X, Pid} || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0
+         {{Ns, X}, Pid} || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0
       ])
    ).      
       
