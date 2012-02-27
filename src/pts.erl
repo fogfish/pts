@@ -86,7 +86,7 @@ new(Ns, Opts) ->
             keypos   = proplists:get_value(keypos, Opts, 1),
             async    = proplists:is_defined(async, Opts),
             readonly = proplists:is_defined(readonly, Opts),
-            supervise= proplists:is_defined(supervise, Opts),
+            %supervise= proplists:is_defined(supervise, Opts),
             timeout  = proplists:get_value(timeout, Opts, 5000),
             factory  = proplists:get_value(factory, Opts)
          }),
@@ -245,11 +245,11 @@ fold(Ns, Acc, Fun) ->
 attach({Ns, _} = Key) ->
    case ets:lookup(pts_table, Ns) of
       [T] -> 
-         pts_ns:register(Key, self()),
-         case T#pts.supervise of
-            false -> ok;
-            true  -> pts_pid_sup:supervise(self())
-         end;
+         pts_ns:register(Key, self());
+         %case T#pts.supervise of
+         %   false -> ok;
+         %   true  -> pts_pid_sup:supervise(self())
+         %end;
       _   -> {error, no_table}
    end.
    

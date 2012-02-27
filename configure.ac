@@ -16,7 +16,7 @@ dnl  License along with this library; if not, write to the Free Software
 dnl  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 dnl  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 dnl
-AC_INIT([pts], [0.3.0], [dmkolesnikov@gmail.com])
+AC_INIT([pts], [0.3.1], [dmkolesnikov@gmail.com])
 AM_INIT_AUTOMAKE([silent-rules])
 AM_SILENT_RULES([yes])
 ACX_INIT_GNUWEB

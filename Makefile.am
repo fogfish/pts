@@ -21,7 +21,6 @@ SUBDIRS = test examples
 pts_SRC = \
    src/pts.erl \
    src/pts_ns.erl \
-   src/pts_pid_sup.erl \
    src/pts_sup.erl \
    src/pts_app.erl
 

@@ -34,14 +34,6 @@ init([]) ->
    {ok,
       {
          {one_for_one, 2, 60},
-         [{
-            pts_pid_sup,
-            {
-               pts_pid_sup,
-               start_link,
-               []
-            },
-            permanent, brutal_kill, worker, dynamic
-         }]
+         []
       }
    }.
