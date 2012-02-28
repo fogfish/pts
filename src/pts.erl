@@ -204,7 +204,7 @@ remove({Ns, _} = Key) ->
 map(#pts{ns = Ns} = Tab, Fun) ->
    pts_ns:map(Ns, 
       fun({Key, Pid}) ->
-         Get = fun() -> {ok, Val} = prot_get(Tab, Pid, Key), Val end,
+         Get = fun() -> prot_get(Tab, Pid, Key) end,
          Fun({Key, Get})
       end
    );
@@ -221,7 +221,7 @@ map(Ns, Fun) ->
 fold(#pts{ns = Ns} = Tab, Acc, Fun) ->
    pts_ns:fold(Ns, Acc,
       fun({Key, Pid}, A) ->
-         Get = fun() -> {ok, Val} = prot_get(Tab, Pid, Key), Val end,
+         Get = fun() -> prot_get(Tab, Pid, Key) end,
          Fun({Key, Get}, A)
       end
    );
