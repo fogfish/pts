@@ -43,7 +43,7 @@
 start_link(Key) ->
   gen_server:start_link(?MODULE, [Key], []).
   
-init([{create, Key}]) ->
+init([{pts, _, {create, Key}}]) ->
    pts:attach(Key),
    {ok, 
       #srv{
@@ -63,21 +63,30 @@ handle_cast(_Req, State) ->
 handle_info(timeout, S) ->
    {stop, normal, S};
 
-handle_info({pts, Tx, {put, _Key, Val}}, S) ->  
-   TTL = case is_list(Val) of
-      true  -> proplists:get_value(ttl, Val, ?TTL_DEF);
-      false -> ?TTL_DEF 
-   end,
+handle_info({pts, Tx, {put, Val}}, S) ->  
+   %TTL = case is_list(Val) of
+   %   true  -> proplists:get_value(ttl, Val, ?TTL_DEF);
+   %   false -> ?TTL_DEF 
+   %end,
    pts:notify(Tx, ok),
-   {noreply, S#srv{ttl = TTL, val = Val}, TTL};
-
+   %{noreply, S#srv{ttl = TTL, val = Val}, TTL};
+   {noreply, S#srv{val = Val}};
+   
+handle_info({pts, Tx, {putget, Val}}, S) ->  
+   pts:notify(Tx, {ok, S#srv.val}),
+   {noreply, S#srv{val = Val}};
+   
 handle_info({pts, Tx, {get, _Key}}, S) ->   
    pts:notify(Tx, {ok, S#srv.val}),
-   {noreply, S, S#srv.ttl};
+   {noreply, S};
 
-handle_info({pts, Tx, {remove, _Key}}, S) ->   
+handle_info({pts, Tx, {delete, _Key}}, S) ->   
    pts:notify(Tx, ok),
-   {stop, normal, S}.
+   {stop, normal, S};
+   
+handle_info({pts, Tx, {remove, _Key}}, S) ->   
+   pts:notify(Tx, {ok, S#srv.val}),
+   {stop, normal, S}.   
    
 terminate(_Reason, S) ->
    pts:detach(S#srv.key),

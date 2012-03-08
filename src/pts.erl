@@ -26,27 +26,21 @@
 %% across Erlang processes.
 %%
 
--export([
-   % table management interface
-   new/1,
-   new/2,
-   drop/1,
-   i/0,
-   i/1,
-   i/2,
-   % data management interface
-   put/2,
-   has/1,
-   get/1,
-   remove/1,
-   map/2,
-   fold/3,
-   % process interface 
-   attach/1,
-   detach/1,
-   notify/2
-]).
-
+%%
+%% Management
+-export([new/1, new/2, drop/1, i/0, i/1, i/2]).
+%%
+%% CRUD
+-export([create/2, read/2, update/2, delete/2]).
+%%
+%% Hashtable
+-export([put/2, get/2, remove/2]).
+%%
+%% Map/Fold
+-export([map/2, fold/3]).
+%%
+%% Process interface
+-export([attach/1, detach/1, notify/2]).
 
 %%
 %% internal record, pts-table metadata
@@ -143,93 +137,163 @@ i(Ns, Prop) ->
 
 %%-----------------------------------------------------------------------------
 %%
-%% data management
+%% CRUD
 %%
 %%-----------------------------------------------------------------------------
 
 %%
-%% put(Key, Val) -> ok | {error, Reason} 
+%% create(Ns, Val) -> ok | {error, Reason}
+%%
+create(Ns, Val) ->
+   case ets:lookup(pts_table, Ns) of
+      [] ->
+         {error, no_namespace};
+      [#pts{readonly = true}] ->
+         {error, readonly};
+      [#pts{factory  = undefined}] ->
+         {error, readonly};
+      [#pts{factory  = F, keypos = Pos, timeout = T1}] ->
+         Key = erlang:element(Pos, Val),
+         case pts_ns:whereis({Ns, Key}) of
+            undefined ->
+               %% Note
+               {ok, Pid} = pts_prot:req(F, {create, {Ns, Key}}, T1),
+               pts_prot:req(Pid, {put, Val}, T1);
+            _ ->
+               {error, duplicate}
+         end
+   end.   
+
+
+read(Ns, Key) ->
+   case ets:lookup(pts_table, Ns) of
+      [] ->
+         {error, no_namespace};
+      [#pts{timeout = T1}] ->
+         case pts_ns:whereis({Ns, Key}) of
+            undefined -> {error, not_found};
+            Pid       -> pts_prot:req(Pid, {get, {Ns,Key}}, T1)
+         end
+   end.
+   
+   
+update(Ns, Val) ->
+   case ets:lookup(pts_table, Ns) of
+      [] ->
+         {error, no_namespace};
+      [#pts{readonly = true}] ->
+         {error, readonly};
+      [#pts{factory  = undefined}] ->
+         {error, readonly};
+      [#pts{keypos = Pos, timeout = T1}] ->
+         Key = erlang:element(Pos, Val),
+         case pts_ns:whereis({Ns, Key}) of
+            undefined -> {error, {not_found, {Ns, Key}}};
+            Pid       -> pts_prot:req(Pid, {put, Val}, T1)
+         end
+   end.
+   
+   
+delete(Ns, Key) ->
+   case ets:lookup(pts_table, Ns) of
+      [] ->
+         {error, no_namespace};
+      [#pts{readonly = true}] ->
+         {error, readonly};
+      [#pts{factory  = undefined}] ->
+         {error, readonly};
+      [#pts{timeout = T1}] ->
+         case pts_ns:whereis({Ns, Key}) of
+            undefined -> ok;
+            Pid       -> pts_prot:req(Pid, {delete, {Ns,Key}}, T1)
+         end
+   end.
+   
+   
+%%
+%% put(Key, Val) -> ok | {error, Reason} 
 %%
 %% Inserts the value object into table and assotiates its with the key. 
 %% If tables is set or ordered_set and the key of inserted value matches
 %% any existed key, the old assotiation is replace.
 %%
-put({Ns, _} = Key, Val) ->
+put(Ns, Val) ->
    case ets:lookup(pts_table, Ns) of
-      [T] -> do_put(T, Key, Val);
-      _   -> {error, no_namespace}
-   end.
+      [] ->
+         {error, no_namespace};
+      [#pts{readonly = true}] ->
+         {error, readonly};
+      [#pts{factory  = undefined}] ->
+         {error, readonly};
+      [#pts{factory  = F, keypos = Pos, timeout = T1}] ->
+         Key = erlang:element(Pos, Val),
+         case pts_ns:whereis({Ns, Key}) of
+            undefined ->
+               {ok, Pid} = pts_prot:req(F, {create, {Ns, Key}}, T1),
+               pts_prot:req(Pid, {put,    Val}, T1);
+            Pid ->
+               pts_prot:req(Pid, {putget, Val}, T1)
+         end
+   end.   
    
-%%
-%% has(Key) -> bool()
-%%
-%% Check if the key exists in the table
-%%
-has({_,_} = Key) ->
-   case pts_ns:whereis(Key) of
-      undefined -> false;
-      _         -> true
-   end.
 
 %%
 %% get(Key) -> {ok, Val} | {error, Reason}
 %%
 %% return a value assotiated with key
 %%
-get({Ns, _} = Key) ->
-   case ets:lookup(pts_table, Ns) of
-      [T] -> 
-         case pts_ns:whereis(Key) of
-            undefined -> {error, not_found};
-            Pid       -> prot_get(T, Pid, Key)
-         end;
-      _   -> {error, no_table}
-   end.
+get(Ns, Key) ->
+   read(Ns, Key).
    
    
 %%
-%% remove(Tab, Key) -> ok | {error, _}
+%% remove(Tab, Key) -> {ok, Val} | {error, _}
 %%
 %% removes the value 
 %%
-remove({Ns, _} = Key) ->
+remove(Ns, Key) ->
    case ets:lookup(pts_table, Ns) of
-      [T] -> do_remove(T, Key);
-      _   -> {error, no_table}
+      [] ->
+         {error, no_namespace};
+      [#pts{readonly = true}] ->
+         {error, readonly};
+      [#pts{factory  = undefined}] ->
+         {error, readonly};
+      [#pts{timeout = T1}] ->
+         case pts_ns:whereis({Ns, Key}) of
+            undefined -> ok;
+            Pid       -> pts_prot:req(Pid, {remove, {Ns,Key}}, T1)
+         end
    end.
    
 %%
 %% map(Tab, Fun) -> List
 %%
-map(#pts{ns = Ns} = Tab, Fun) ->
-   pts_ns:map(Ns, 
-      fun({Key, Pid}) ->
-         Get = fun() -> prot_get(Tab, Pid, Key) end,
-         Fun({Key, Get})
-      end
-   );
-   
 map(Ns, Fun) ->   
    case ets:lookup(pts_table, Ns) of
-      [T] -> map(T, Fun);
-      _   -> {error, no_table}
+      []   -> {error, no_namespace};
+      [#pts{timeout = T1}] -> 
+         pts_ns:map(Ns, 
+            fun({{_, Key}, Pid}) ->
+               Get = fun() -> pts_prot:req(Pid, {get, {Ns, Key}}, T1) end,
+               Fun({Key, Get})
+            end
+         )
    end.  
 
 %%
 %% foldl(Tab, Acc0, Fun) -> Acc
 %%
-fold(#pts{ns = Ns} = Tab, Acc, Fun) ->
-   pts_ns:fold(Ns, Acc,
-      fun({Key, Pid}, A) ->
-         Get = fun() -> prot_get(Tab, Pid, Key) end,
-         Fun({Key, Get}, A)
-      end
-   );
-   
 fold(Ns, Acc, Fun) ->   
    case ets:lookup(pts_table, Ns) of
-      [T] -> fold(T, Acc, Fun);
-      _   -> {error, no_table}
+      []   -> {error, no_namespace};
+      [#pts{timeout = T1}] -> 
+         pts_ns:fold(Ns, Acc, 
+            fun({{_, Key}, Pid}, A) ->
+               Get = fun() -> pts_prot:req(Pid, {get, {Ns, Key}}, T1) end,
+               Fun({Key, Get}, A)
+            end
+         )
    end.   
    
 
@@ -244,13 +308,13 @@ fold(Ns, Acc, Fun) ->
 %%
 attach({Ns, _} = Key) ->
    case ets:lookup(pts_table, Ns) of
-      [T] -> 
+      [_] -> 
          pts_ns:register(Key, self());
          %case T#pts.supervise of
          %   false -> ok;
          %   true  -> pts_pid_sup:supervise(self())
          %end;
-      _   -> {error, no_table}
+      _   -> {error, no_namespace}
    end.
    
 %%
@@ -265,8 +329,8 @@ detach({Ns, _} = Key) ->
 %%
 %% 
 %% notify transaction
-notify({Pid, Ref}, Rsp) ->
-   erlang:send(Pid, {pts, Ref, Rsp}).   
+notify({Pid, _} = Tx, Rsp) ->
+   erlang:send(Pid, {pts, Tx, Rsp}).   
    
 %%-----------------------------------------------------------------------------
 %%
@@ -274,72 +338,4 @@ notify({Pid, Ref}, Rsp) ->
 %%
 %%-----------------------------------------------------------------------------
 
-do_put(#pts{readonly = true}, _Key, _Val) ->
-   {error, readonly};
-do_put(#pts{factory = undefined}, _Key, _Val) ->
-   {error, readonly};
-do_put(#pts{factory = F} = Tab, Key, Val) ->
-   % resolve id of managing process
-   Pid = case pts_ns:whereis(Key) of
-      undefined ->
-         {ok, Pid0} = F({create, Key}),
-         Pid0;
-      Pid0 ->
-         Pid0
-   end,
-   prot_put(Tab, Pid, Key, Val).  
-
-do_remove(#pts{readonly = true}, _Key) ->
-   {error, readonly};
-do_remove(#pts{factory = undefined}, _Key) ->
-   {error, readonly};
-do_remove(#pts{} = Tab, Key) ->
-   case pts_ns:whereis(Key) of
-      undefined -> ok;
-      Pid       -> prot_remove(Tab, Pid, Key)
-   end.
-
-%%
-%% 
-prot_put(#pts{async = true}, Pid, Key, Val) ->
-   erlang:send(Pid, {pts, self(), {put, Key, Val}}),
-   ok;
-
-prot_put(#pts{timeout = T}, Pid, Key, Val) ->
-   prot_sync_call(Pid, {put, Key, Val}, T).
-
-%%
-%%
-prot_get(#pts{timeout = T}, Pid, Key) ->
-   prot_sync_call(Pid, {get, Key}, T).  
-   
-%%
-%%
-prot_remove(#pts{async = true}, Pid, Key) ->
-   erlang:send(Pid, {pts, self(), {remove, Key}}),
-   ok;
-
-prot_remove(#pts{timeout = T}, Pid, Key) ->
-   prot_sync_call(Pid, {remove, Key}, T).
-
-%%
-%% executes synchronous protocol operation
-prot_sync_call(Pid, Req, Timeout) ->
-   try erlang:monitor(process, Pid) of
-      Ref ->
-         catch erlang:send(Pid, {pts, {self(), Ref}, Req}, [noconnect]),
-         receive
-            {'DOWN', Ref, _, _, Reason} -> 
-               {error, Reason};
-            {pts, Ref, Response}  -> 
-               erlang:demonitor(Ref, [flush]),
-               Response
-         after Timeout ->
-            erlang:demonitor(Ref, [flush]),
-		      {error, timeout}
-         end
-   catch
-      error:_ -> {error, system}
-   end.   
- 
          

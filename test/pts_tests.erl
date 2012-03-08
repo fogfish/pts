@@ -27,18 +27,24 @@
 %%-----------------------------------------------------------------------------
 proc(Key0, Val0) ->
    receive
-      {pts, Tx, {put, Key, Val}} ->
+      {pts, Tx, {put, Val}}  ->
          pts:notify(Tx, ok),
-         proc(Key, Val);
+         proc(Key0, Val);
+      {pts, Tx, {putget, Val}} ->
+         pts:notify(Tx, {ok, Val0}),
+         proc(Key0, Val);
       {pts, Tx, {get, Key}} ->
          pts:notify(Tx, {ok, Val0}),
          proc(Key0, Val0);
+      {pts, Tx, {delete, Key}} ->
+         pts:detach(Key),
+         pts:notify(Tx,  ok);
       {pts, Tx, {remove, Key}} ->
          pts:detach(Key),
-         pts:notify(Tx,  ok)
+         pts:notify(Tx,  {ok, Val0})   
    end.
 
-factory({create, Key}) ->
+factory({pts, _, {create, Key}}) ->
    {ok, spawn(
       fun() ->
          pts:attach(Key),
@@ -85,60 +91,74 @@ drop_tbl2() ->
 %% data management
 %%
 %%-----------------------------------------------------------------------------
--define(KEY, {key, 1}).
--define(NS1,  test).
+-define(NS1,  "pts:test").
 -define(NS2,  {test, 1}).
+
+
+-define(PTS, "kvs:test").
+-define(KEY, key).
+-define(VAL, {key, "value"}).
+-define(NEW, {key,   "new"}).
 
 pts_dat_mgmt_test_() ->
    {
       setup,
       fun() -> 
          application:start(pts),
-         pts:new(?NS1, [
-            {factory, fun factory/1}
-         ]),
-         pts:new(?NS2, [
+         pts:new(?PTS, [
             {factory, fun factory/1}
          ])
       end,
       [
+         {"Create", fun create/0},
+         {"Read",   fun read/0},
+         {"Update", fun update/0},
+         {"Delete", fun delete/0},
+         
          {"Put", fun put/0},
-         {"Has", fun has/0},
          {"Get", fun get/0},
          {"Remove", fun remove/0},
+         
          {"Map", fun map/0},
-         {"Fold", fun fold/0},
-         {"Put (tuple)", fun tput/0},
-         {"Has (tuple)", fun thas/0},
-         {"Get (tuple)", fun tget/0},
-         {"Remove (tuple)", fun tremove/0},
-         {"Map (tuple)", fun tmap/0},
-         {"Fold (tuple)", fun tfold/0}
+         {"Fold", fun fold/0}
       ]
    }.   
    
-put() ->
-   ok = pts:put({?NS1, ?KEY}, value).
+
+create() ->
+   ok   = pts:create(?PTS, ?VAL),
+   true = is_process_alive(pts_ns:whereis({?PTS, ?KEY})).
    
-has() ->
-   true  = pts:has({?NS1, ?KEY}),
-   false = pts:has({?NS1, key}).
+read() ->
+   {ok, ?VAL} = pts:read(?PTS, ?KEY).
+   
+update() ->
+   ok = pts:update(?PTS, ?NEW).
+   
+delete() ->
+   ok = pts:delete(?PTS, ?KEY),
+   undefined = pts_ns:whereis({?PTS, ?KEY}).
+   
+   
+put() ->
+   ok         = pts:put(?PTS, ?VAL),
+   {ok, ?VAL} = pts:put(?PTS, ?NEW).
    
 get() ->
-   {ok, value} = pts:get({?NS1, ?KEY}),
-   {error, not_found} = pts:get({?NS1, key}).
+   {ok, ?NEW} = pts:get(?PTS, ?KEY).
    
 remove() ->
-   ok = pts:remove({?NS1, ?KEY}),
-   false = pts:has({?NS1, ?KEY}),
-   {error, not_found} = pts:get({?NS1, ?KEY}).
+   {ok, ?NEW} = pts:remove(?PTS, ?KEY).
+
+   
+   
 
 map() ->
    lists:foreach(
-      fun(X) -> ok = pts:put({?NS1, X}, X) end,
+      fun(X) -> ok = pts:create(?PTS, {X, X}) end,
       lists:seq(1,5)
    ),
-   M = pts:map(?NS1, fun({{_,K},V}) -> {ok, V0} = V(), K*V0 end), 
+   M = pts:map(?PTS, fun({K,V}) ->  {ok, {_,V0}} = V(), K*V0 end), 
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -146,52 +166,12 @@ map() ->
    
 fold() ->
    lists:foreach(
-      fun(X) -> ok = pts:put({?NS1, X}, X) end,
+      fun(X) -> ok = pts:update(?PTS, {X, X}) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(?NS1, 0, fun({{_,K},V}, A) -> {ok, V0} = V(), A + K*V0 end),
+   M = pts:fold(?PTS, 0, fun({K,V}, A) -> {ok, {_,V0}} = V(), A + K*V0 end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,
       lists:seq(1,5)
    ).   
-   
-   
-tput() ->
-   ok = pts:put({?NS2, ?KEY}, value).
-   
-thas() ->
-   true  = pts:has({?NS2, ?KEY}),
-   false = pts:has({?NS2,  key}).
-   
-tget() ->
-   {ok, value} = pts:get({?NS2, ?KEY}),
-   {error, not_found} = pts:get({?NS2, key}).
-   
-tremove() ->
-   ok = pts:remove({?NS2, ?KEY}),
-   false = pts:has({?NS2, ?KEY}),
-   {error, not_found} = pts:get({?NS2, ?KEY}).
-
-tmap() ->
-   lists:foreach(
-      fun(X) -> ok = pts:put({?NS2, X}, X) end,
-      lists:seq(1,5)
-   ),
-   M = pts:map(?NS2, fun({{_,K},V}) -> {ok, V0} = V(), K*V0 end),
-   lists:foreach(
-      fun(X) -> true = lists:member(X*X, M) end, 
-      lists:seq(1,5)
-   ).
-   
-tfold() ->
-   lists:foreach(
-      fun(X) -> ok = pts:put({?NS2, X}, X) end,
-      lists:seq(1,5)
-   ),
-   M = pts:fold(?NS2, 0, fun({{_,K},V}, A) -> {ok, V0} = V(), A + K*V0 end),
-   M = lists:foldl(
-      fun(X, A) -> A + X*X end,
-      0,
-      lists:seq(1,5)
-   ).      

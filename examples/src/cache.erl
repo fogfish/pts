@@ -38,27 +38,104 @@ start() ->
 b(N) ->
    Set = dataset(N),
    [
-      {[b(pts, write, Set), b(ets, write, Set)]},
-      {[b(pts, read, Set), b(ets, read, Set)]}
+      {[b(pts, create, Set), b(ets, create, Set)]},
+      {[b(pts, read,   Set), b(ets, read, Set)]},
+      {[b(pts, update, Set), b(ets, update, Set)]},
+      {[b(pts, delete, Set), b(ets, delete, Set)]}
    ].
   
 %%
 %%
-b(pts, write, {_, Val, Seq}) ->   
+b(pts, create, {_, Val, Seq}) ->   
    {Tio,  _} = timer:tc(
       fun() ->
          lists:foreach(
             fun(X) ->
-               ok = pts:put({cache, gen_key(X)}, Val)
+               ok = pts:create(cache, {gen_key(X), Val})
             end,
             Seq
          )
       end,
       []
    ),
-   {pts, write, Tio / 1000};
+   {pts, create, Tio / 1000};
+   
+b(pts, update, {_, Val, Seq}) ->   
+   {Tio,  _} = timer:tc(
+      fun() ->
+         lists:foreach(
+            fun(X) ->
+               ok =  pts:update(cache, {gen_key(X), Val})
+            end,
+            Seq
+         )
+      end,
+      []
+   ),
+   {pts, update, Tio / 1000};   
+   
+b(pts, read, {_N, _, Seq}) ->   
+   Seq1 = shuffle(Seq),
+   {Tio,  _} = timer:tc(
+      fun() ->
+         lists:foreach(
+            fun(X) ->
+               {ok, _} = pts:read(cache, gen_key(X))
+            end,
+            Seq1
+         )
+      end,
+      []
+   ),
+   {pts, read, Tio / 1000};   
+   
+b(pts, delete, {_N, _, Seq}) ->   
+   Seq1 = shuffle(Seq),
+   {Tio,  _} = timer:tc(
+      fun() ->
+         lists:foreach(
+            fun(X) ->
+               ok = pts:delete(cache, gen_key(X))
+            end,
+            Seq1
+         )
+      end,
+      []
+   ),
+   {pts, delete, Tio / 1000};
 
-b(ets, write, {_, Val, Seq}) ->   
+
+   
+b(ets, create, {_, Val, Seq}) ->   
+   {Tio,  _} = timer:tc(
+      fun() ->
+         lists:foreach(
+            fun(X) ->
+               true = ets:insert_new(ets_cache, {gen_key(X), Val})
+            end,
+            Seq
+         )
+      end,
+      []
+   ),
+   {ets, create, Tio / 1000};   
+   
+b(ets, read, {_N, _, Seq}) ->   
+   Seq1 = shuffle(Seq),
+   {Tio,  _} = timer:tc(
+      fun() ->
+         lists:foreach(
+            fun(X) ->
+               [_] = ets:lookup(ets_cache, gen_key(X))
+            end,
+            Seq1
+         )
+      end,
+      []
+   ),
+   {ets, read, Tio / 1000};   
+
+b(ets, update, {_, Val, Seq}) ->   
    {Tio,  _} = timer:tc(
       fun() ->
          lists:foreach(
@@ -70,37 +147,23 @@ b(ets, write, {_, Val, Seq}) ->
       end,
       []
    ),
-   {ets, write, Tio / 1000};
+   {ets, update, Tio / 1000};
    
-b(pts, read, {_N, _, Seq}) ->   
-   Seq1 = shuffle(Seq),
-   {Tio,  _} = timer:tc(
-      fun() ->
-         lists:foreach(
-            fun(X) ->
-               pts:get({cache, gen_key(X)})
-            end,
-            Seq1
-         )
-      end,
-      []
-   ),
-   {pts, read, Tio / 1000};   
 
-b(ets, read, {_N, _, Seq}) ->   
+b(ets, delete, {_N, _, Seq}) ->   
    Seq1 = shuffle(Seq),
    {Tio,  _} = timer:tc(
       fun() ->
          lists:foreach(
             fun(X) ->
-               ets:lookup(ets_cache, gen_key(X))
+               ets:delete(ets_cache, gen_key(X))
             end,
             Seq1
          )
       end,
       []
    ),
-   {ets, read, Tio / 1000}.   
+   {ets, delete, Tio / 1000}.   
    
 %%
 %% generates a data set
@@ -112,12 +175,12 @@ gen_key(X) ->
    {key, X}.
 
 gen_val(X) ->
-   Val = rnd_string(1024, "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890"), 
-   [
-      {ttl, 60000},
-      {ind, X},
-      {val, Val}
-   ].
+   Val = rnd_string(1024, "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890"). 
+   %[
+   %   {ttl, 60000},
+   %   {ind, X},
+   %   {val, Val}
+   %].
    
 
 

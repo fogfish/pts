@@ -48,7 +48,6 @@
 %% core opts for namespace
 -define(CORE_OPTS, [
    ordered_set,
-   {read_concurrency, true},
    {write_concurrency, true}
 ]).
 
@@ -117,7 +116,7 @@ whereis(Ns, Uid) ->
 whereis(Uid) ->
    case ets:lookup(?REGISTRY, Uid) of
       [{Uid, Pid}] ->
-         case is_process_alive(Pid) of
+         case is_uid_alive(Pid) of
             true  -> Pid;
             false -> undefined
          end;
@@ -173,6 +172,14 @@ fold(Ns0, Acc0, Fun) ->
 %% private
 %%
 %%-----------------------------------------------------------------------------
+
+%%
+%% check 
+is_uid_alive(Uid) when is_pid(Uid) ->
+   is_process_alive(Uid);
+is_uid_alive(Uid) ->
+   true.
+
 
 %%
 %% new(Ns, Opts) -> Ref
