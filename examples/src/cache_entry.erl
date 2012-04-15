@@ -63,30 +63,31 @@ handle_cast(_Req, State) ->
 handle_info(timeout, S) ->
    {stop, normal, S};
 
-handle_info({pts, Tx, {put, Val}}, S) ->  
+handle_info({pts, Tx, {put, Flags, Val}}, S) ->  
    %TTL = case is_list(Val) of
    %   true  -> proplists:get_value(ttl, Val, ?TTL_DEF);
    %   false -> ?TTL_DEF 
    %end,
-   pts:notify(Tx, ok),
+   case Flags of
+      nil -> pts:notify(Tx, ok);
+      val -> pts:notify(Tx, {ok, S#srv.val})
+   end,
    %{noreply, S#srv{ttl = TTL, val = Val}, TTL};
-   {noreply, S#srv{val = Val}};
-   
-handle_info({pts, Tx, {putget, Val}}, S) ->  
-   pts:notify(Tx, {ok, S#srv.val}),
    {noreply, S#srv{val = Val}};
    
 handle_info({pts, Tx, {get, _Key}}, S) ->   
    pts:notify(Tx, {ok, S#srv.val}),
    {noreply, S};
 
-handle_info({pts, Tx, {delete, _Key}}, S) ->   
-   pts:notify(Tx, ok),
-   {stop, normal, S};
-   
-handle_info({pts, Tx, {remove, _Key}}, S) ->   
-   pts:notify(Tx, {ok, S#srv.val}),
+handle_info({pts, Tx, {remove, Flags, _Key}}, S) ->   
+   case Flags of
+      nil -> pts:notify(Tx, ok);
+      val -> pts:notify(Tx, {ok, S#srv.val})
+   end,
    {stop, normal, S}.   
+   
+   
+   
    
 terminate(_Reason, S) ->
    pts:detach(S#srv.key),

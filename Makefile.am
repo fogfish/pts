@@ -20,8 +20,8 @@ SUBDIRS = test examples
 
 pts_SRC = \
    src/pts.erl \
+   src/pns.erl \
    src/pts_prot.erl \
-   src/pts_ns.erl \
    src/pts_sup.erl \
    src/pts_app.erl
 
@@ -31,7 +31,6 @@ nobase_pkgliberl_SCRIPTS = \
 
 CLEANFILES = $(nobase_pkgliberl_SCRIPTS)
 EXTRA_DIST = $(pts_SRC)
-
 
 run-example:
 	$(ERL) -pa ./ebin -pa ./examples/ebin +P 90000000

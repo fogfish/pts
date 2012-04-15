@@ -51,7 +51,8 @@
    readonly, % write operations are disabled
    supervise,% processes supervised
    timeout,  % process timeout operation
-   factory   % factory function  
+   factory,  % factory function  
+   entry     % entry specific settings
 }).
 
 %%-----------------------------------------------------------------------------
@@ -82,7 +83,8 @@ new(Ns, Opts) ->
             readonly = proplists:is_defined(readonly, Opts),
             %supervise= proplists:is_defined(supervise, Opts),
             timeout  = proplists:get_value(timeout, Opts, 5000),
-            factory  = proplists:get_value(factory, Opts)
+            factory  = proplists:get_value(factory, Opts),
+            entry    = proplists:get_value(entry, Opts, [])
          }),
          ok;
       _  -> 
@@ -152,13 +154,13 @@ create(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{factory  = F, keypos = Pos, timeout = T1}] ->
+      [#pts{factory  = F, keypos = Pos, timeout = T1, entry = E}] ->
          Key = erlang:element(Pos, Val),
-         case pts_ns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, Key}) of
             undefined ->
                %% Note
-               {ok, Pid} = pts_prot:req(F, {create, {Ns, Key}}, T1),
-               pts_prot:req(Pid, {put, Val}, T1);
+               {ok, Pid} = pts_prot:req(F, {create, E, {Ns, Key}}, T1),
+               pts_prot:req(Pid, {put, nil, Val}, T1);
             _ ->
                {error, duplicate}
          end
@@ -170,7 +172,7 @@ read(Ns, Key) ->
       [] ->
          {error, no_namespace};
       [#pts{timeout = T1}] ->
-         case pts_ns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, Key}) of
             undefined -> {error, not_found};
             Pid       -> pts_prot:req(Pid, {get, {Ns,Key}}, T1)
          end
@@ -187,9 +189,9 @@ update(Ns, Val) ->
          {error, readonly};
       [#pts{keypos = Pos, timeout = T1}] ->
          Key = erlang:element(Pos, Val),
-         case pts_ns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, Key}) of
             undefined -> {error, {not_found, {Ns, Key}}};
-            Pid       -> pts_prot:req(Pid, {put, Val}, T1)
+            Pid       -> pts_prot:req(Pid, {put, nil, Val}, T1)
          end
    end.
    
@@ -203,9 +205,9 @@ delete(Ns, Key) ->
       [#pts{factory  = undefined}] ->
          {error, readonly};
       [#pts{timeout = T1}] ->
-         case pts_ns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, Key}) of
             undefined -> ok;
-            Pid       -> pts_prot:req(Pid, {delete, {Ns,Key}}, T1)
+            Pid       -> pts_prot:req(Pid, {remove, nil, {Ns,Key}}, T1)
          end
    end.
    
@@ -225,14 +227,14 @@ put(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{factory  = F, keypos = Pos, timeout = T1}] ->
+      [#pts{factory  = F, keypos = Pos, timeout = T1, entry = E}] ->
          Key = erlang:element(Pos, Val),
-         case pts_ns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, Key}) of
             undefined ->
-               {ok, Pid} = pts_prot:req(F, {create, {Ns, Key}}, T1),
-               pts_prot:req(Pid, {put,    Val}, T1);
+               {ok, Pid} = pts_prot:req(F, {create, E, {Ns, Key}}, T1),
+               pts_prot:req(Pid, {put, nil, Val}, T1);
             Pid ->
-               pts_prot:req(Pid, {putget, Val}, T1)
+               pts_prot:req(Pid, {put, val,  Val}, T1)
          end
    end.   
    
@@ -260,9 +262,9 @@ remove(Ns, Key) ->
       [#pts{factory  = undefined}] ->
          {error, readonly};
       [#pts{timeout = T1}] ->
-         case pts_ns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, Key}) of
             undefined -> ok;
-            Pid       -> pts_prot:req(Pid, {remove, {Ns,Key}}, T1)
+            Pid       -> pts_prot:req(Pid, {remove, val, {Ns,Key}}, T1)
          end
    end.
    
@@ -273,7 +275,7 @@ map(Ns, Fun) ->
    case ets:lookup(pts_table, Ns) of
       []   -> {error, no_namespace};
       [#pts{timeout = T1}] -> 
-         pts_ns:map(Ns, 
+         pns:map(Ns, 
             fun({{_, Key}, Pid}) ->
                Get = fun() -> pts_prot:req(Pid, {get, {Ns, Key}}, T1) end,
                Fun({Key, Get})
@@ -288,7 +290,7 @@ fold(Ns, Acc, Fun) ->
    case ets:lookup(pts_table, Ns) of
       []   -> {error, no_namespace};
       [#pts{timeout = T1}] -> 
-         pts_ns:fold(Ns, Acc, 
+         pns:fold(Ns, Acc, 
             fun({{_, Key}, Pid}, A) ->
                Get = fun() -> pts_prot:req(Pid, {get, {Ns, Key}}, T1) end,
                Fun({Key, Get}, A)
@@ -309,7 +311,7 @@ fold(Ns, Acc, Fun) ->
 attach({Ns, _} = Key) ->
    case ets:lookup(pts_table, Ns) of
       [_] -> 
-         pts_ns:register(Key, self());
+         pns:register(Key, self());
          %case T#pts.supervise of
          %   false -> ok;
          %   true  -> pts_pid_sup:supervise(self())
@@ -322,7 +324,7 @@ attach({Ns, _} = Key) ->
 %%
 detach({Ns, _} = Key) ->
    case ets:lookup(pts_table, Ns) of
-      [_] -> pts_ns:unregister(Key);
+      [_] -> pns:unregister(Key);
       _   -> {error, no_table}
    end.
    

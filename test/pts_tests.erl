@@ -27,24 +27,24 @@
 %%-----------------------------------------------------------------------------
 proc(Key0, Val0) ->
    receive
-      {pts, Tx, {put, Val}}  ->
-         pts:notify(Tx, ok),
-         proc(Key0, Val);
-      {pts, Tx, {putget, Val}} ->
-         pts:notify(Tx, {ok, Val0}),
+      {pts, Tx, {put, Flags, Val}}  ->
+         case Flags of
+            nil -> pts:notify(Tx, ok);
+            val -> pts:notify(Tx, {ok, Val0})
+         end,
          proc(Key0, Val);
       {pts, Tx, {get, Key}} ->
          pts:notify(Tx, {ok, Val0}),
          proc(Key0, Val0);
-      {pts, Tx, {delete, Key}} ->
+      {pts, Tx, {remove, Flags, Key}} ->
          pts:detach(Key),
-         pts:notify(Tx,  ok);
-      {pts, Tx, {remove, Key}} ->
-         pts:detach(Key),
-         pts:notify(Tx,  {ok, Val0})   
+         case Flags of
+            nil -> pts:notify(Tx,  ok);
+            val -> pts:notify(Tx,  {ok, Val0})
+         end
    end.
 
-factory({pts, _, {create, Key}}) ->
+factory({pts, _, {create, _, Key}}) ->
    {ok, spawn(
       fun() ->
          pts:attach(Key),
@@ -127,7 +127,7 @@ pts_dat_mgmt_test_() ->
 
 create() ->
    ok   = pts:create(?PTS, ?VAL),
-   true = is_process_alive(pts_ns:whereis({?PTS, ?KEY})).
+   true = is_process_alive(pns:whereis({?PTS, ?KEY})).
    
 read() ->
    {ok, ?VAL} = pts:read(?PTS, ?KEY).
@@ -137,7 +137,7 @@ update() ->
    
 delete() ->
    ok = pts:delete(?PTS, ?KEY),
-   undefined = pts_ns:whereis({?PTS, ?KEY}).
+   undefined = pns:whereis({?PTS, ?KEY}).
    
    
 put() ->

@@ -17,9 +17,9 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 %%  @description
-%%     Process registry, assotiates a process Uid with Pid
+%%     process namespace
 %%
--module(pts_ns).
+-module(pns).
 -author(dmkolesnikov@gmail.com).
 -include_lib("stdlib/include/qlc.hrl").
 
@@ -73,16 +73,17 @@ start() ->
 %% Failes with badarg is assotiation exists and assotaited process is alive
 %%
 register(Uid) ->
-   pts_ns:register(Uid, self()).
+   ?MODULE:register(Uid, self()).
 register(Ns,  Uid, Pid) ->
-   pts_ns:register({Ns, Uid}, Pid).
+   ?MODULE:register({Ns, Uid}, Pid).
 register(Uid, Pid) ->
    case ets:insert_new(?REGISTRY, {Uid, Pid}) of
       true  -> 
          ok;
       false ->
-         % entry exists but insert is allowed if assotiated process is dead
-         case pts_ns:whereis(Uid) of
+         % entry exists but it shall allow to insert 
+         % an assotiation if old process is dead
+         case ?MODULE:whereis(Uid) of
             undefined -> 
                ets:insert(?REGISTRY, {Uid, Pid}),
                ok;
@@ -100,7 +101,7 @@ register(Uid, Pid) ->
 %%
 %% Removes the registered Uid associatation with a Pid.
 unregister(Ns, Uid) ->
-   pts_ns:unregister({Ns, Uid}).
+   ?MODULE:unregister({Ns, Uid}).
 unregister(Uid) ->
    ets:delete(?REGISTRY, Uid),
    ok.
@@ -111,7 +112,7 @@ unregister(Uid) ->
 %% Returns the Pid assotiated with Uid. 
 %% Returns undefined if the name is not registered.   
 whereis(Ns, Uid) ->
-   pts_ns:whereis({Ns, Uid}).
+   ?MODULE:whereis({Ns, Uid}).
    
 whereis(Uid) ->
    case ets:lookup(?REGISTRY, Uid) of

@@ -28,7 +28,7 @@
 start(_Type, _Args) ->
    case pts_sup:start_link() of
       {ok, Pid} ->
-         ok = pts_ns:start(),
+         ok = pns:start(),
          % meta data for pts tables
          ets:new(pts_table, 
             [ordered_set, public, named_table, {read_concurrency, true}, {keypos, 2}]
