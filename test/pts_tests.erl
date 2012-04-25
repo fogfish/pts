@@ -17,40 +17,68 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 -module(pts_tests).
+-behaviour(gen_server).
 -author(dmkolesnikov@gmail.com).
 -include_lib("eunit/include/eunit.hrl").
+
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %%-----------------------------------------------------------------------------
 %%
 %% test process
 %%
 %%-----------------------------------------------------------------------------
-proc(Key0, Val0) ->
-   receive
-      {pts, Tx, {put, Flags, Val}}  ->
-         case Flags of
-            nil -> pts:notify(Tx, ok);
-            val -> pts:notify(Tx, {ok, Val0})
-         end,
-         proc(Key0, Val);
-      {pts, Tx, {get, Key}} ->
-         pts:notify(Tx, {ok, Val0}),
-         proc(Key0, Val0);
-      {pts, Tx, {remove, Flags, Key}} ->
-         pts:detach(Key),
-         case Flags of
-            nil -> pts:notify(Tx,  ok);
-            val -> pts:notify(Tx,  {ok, Val0})
-         end
-   end.
+init([pts, _, Key]) ->
+   pts:attach(Key),
+   {ok, {Key, nil}}.
 
-factory({pts, _, {create, _, Key}}) ->
-   {ok, spawn(
-      fun() ->
-         pts:attach(Key),
-         proc(Key, nil)
-      end
-   )}.   
+handle_call({put, Val}, _, {Key, _}) ->
+   {reply, ok, {Key, Val}};
+handle_call({get, Key}, _, {_, Val} = S) ->
+   {reply, {ok, Val}, S};
+handle_call({remove, Key}, _, S) ->
+   {stop, normal, ok, S};   
+handle_call(_Req, _From, State) ->
+   {reply, undefined, State}.
+   
+handle_cast(_Req, State) ->
+   {noreply, State}.
+
+handle_info(_Req, State) ->
+   {noreply, State}.
+
+terminate(_Reason, {Key, _}) ->
+   pts:detach(Key),
+   ok.
+   
+code_change(_OldVsn, State, _Extra) ->
+   {ok, State}.     
+
+
+
+% proc(Key0, Val0) ->
+%    receive
+%       {pts, Tx, {put, Flags, Val}}  ->
+%          case Flags of
+%             nil -> pts:notify(Tx, ok);
+%             val -> pts:notify(Tx, {ok, Val0})
+%          end,
+%          proc(Key0, Val);
+%       {pts, Tx, {get, Key}} ->
+%          pts:notify(Tx, {ok, Val0}),
+%          proc(Key0, Val0);
+%       {pts, Tx, {remove, Flags, Key}} ->
+%          pts:detach(Key),
+%          case Flags of
+%             nil -> pts:notify(Tx,  ok);
+%             val -> pts:notify(Tx,  {ok, Val0})
+%          end
+%    end.
+
+factory(Req) ->
+   gen_server:start_link(?MODULE, Req, []).
+
 
 %%-----------------------------------------------------------------------------
 %%
@@ -110,17 +138,17 @@ pts_dat_mgmt_test_() ->
          ])
       end,
       [
-         {"Create", fun create/0},
-         {"Read",   fun read/0},
-         {"Update", fun update/0},
-         {"Delete", fun delete/0},
+          {"Create", fun create/0}
+         ,{"Read",   fun read/0}
+         ,{"Update", fun update/0}
+         ,{"Delete", fun delete/0}
          
-         {"Put", fun put/0},
-         {"Get", fun get/0},
-         {"Remove", fun remove/0},
+         ,{"Put", fun put/0}
+         ,{"Get", fun get/0}
+         ,{"Remove", fun remove/0}
          
-         {"Map", fun map/0},
-         {"Fold", fun fold/0}
+         ,{"Map", fun map/0}
+         ,{"Fold", fun fold/0}
       ]
    }.   
    
@@ -133,7 +161,8 @@ read() ->
    {ok, ?VAL} = pts:read(?PTS, ?KEY).
    
 update() ->
-   ok = pts:update(?PTS, ?NEW).
+   ok = pts:update(?PTS, ?NEW),
+   {ok, ?NEW} = pts:read(?PTS, ?KEY).
    
 delete() ->
    ok = pts:delete(?PTS, ?KEY),
@@ -141,14 +170,14 @@ delete() ->
    
    
 put() ->
-   ok         = pts:put(?PTS, ?VAL),
-   {ok, ?VAL} = pts:put(?PTS, ?NEW).
+   ok = pts:put(?PTS, ?VAL),
+   ok = pts:put(?PTS, ?NEW).
    
 get() ->
    {ok, ?NEW} = pts:get(?PTS, ?KEY).
    
 remove() ->
-   {ok, ?NEW} = pts:remove(?PTS, ?KEY).
+   ok = pts:remove(?PTS, ?KEY).
 
    
    

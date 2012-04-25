@@ -16,17 +16,16 @@
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 #  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 #
-
+cache_USE = pts
 cache_SRC = \
-   src/cache.erl \
-   src/cache_app.erl \
-   src/cache_sup.erl \
-   src/cache_entry.erl \
-   src/cache_entry_sup.erl
+   cache/cache.erl \
+   cache/cache_app.erl \
+   cache/cache_sup.erl \
+   cache/cache_entry.erl \
+   cache/cache_entry_sup.erl
 
 nobase_pkgliberl_SCRIPTS = \
-   ebin/cache.app \
-   $(cache_BEAM)
+   ebin/cache.app
 
 CLEANFILES = $(nobase_pkgliberl_SCRIPTS)
 EXTRA_DIST = $(cache_SRC)

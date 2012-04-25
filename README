@@ -44,7 +44,7 @@ Use-cases
 
    The library assumes existence of two type of processes `actors': 
    
-   * data owner is an Erlang/OTP process that holds/ chunk of data and operates
+   * data owner is an Erlang/OTP process that holds chunk of data and operates
    its life-cycle.   
    
    * data consumer is process that leases data for transient operation
@@ -65,7 +65,7 @@ src/pts.erl file for detailed interface specification and/or example cache
 application.
 
    %% create a new table and define a factory function
-   ok = pts:new(mytable, [{factory, fun my_entry_sup:create/2}]),
+   ok = pts:new(mytable, [{factory, fun my_entry_sup:create/1}]),
    
    %% put a value into process bound to mykey, if such process do not exists
    %% the factory function is called to spawn a new process
@@ -84,17 +84,21 @@ Protocol
    
    Each `data owner' process has to be complient with asynchronous protocol: 
    
-   1. Store data:
-   ----{pts_req_put, Pid, Key, Val}--->
-   <---{pts_rsp_put, Status}-----------
+   1. Create
+   ----init([pts, Own, Key])--->
+   <---{ok, Pid}----------------
+
+   2. Store data:
+   ----{put, Val}-------------->
+   <---ok-----------------------
 
    2. Read data
-   ----{pts_req_get, Pid, Key}-------->
-   <---{pts_rsp_get, {ok, Val}}--------
+   ----{get, Key}-------------->
+   <---{ok, Val}}---------------
    
    3. Remove data
-   ----{pts_req_remove, Pid, Key}----->
-   <---{pts_rsp_remove, Status}--------
+   ----{remove, Key}----------->
+   <---ok-----------------------
    
    see the examples/cache_entry.erl for example.
    
@@ -107,7 +111,7 @@ Performance
    pts is compared to ets for single `data consumer' over example cache 
 application. The 1KB data block(s) are used. 
 
-   version 0.3.x
+   version 0.4.x
 
    Write    10       100        1000        10000
    --------------------------------------------------
@@ -119,17 +123,6 @@ application. The 1KB data block(s) are used.
    pts    0.280 ms  1.785 ms   17.089 ms   190.390 ms
    ets    0.135 ms  0.879 ms    7.839 ms    61.522 ms
 
-   version 0.2.x
-   
-   Write    10       100        1000        10000
-   --------------------------------------------------
-   pts    0.915 ms  6.116 ms   61.652 ms   610.025 ms
-   ets    0.173 ms  1.059 ms   11.193 ms   121.168 ms
-   
-   Read     10       100        1000        10000
-   --------------------------------------------------
-   pts    0.216 ms  1.424 ms   16.051 ms   135.569 ms
-   ets    0.081 ms  0.889 ms    8.038 ms    63.215 ms
    
    pts is 6x times slow for write due to process spawn; and 2x times slow for
 read. 

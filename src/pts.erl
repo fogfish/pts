@@ -22,8 +22,8 @@
 %%
 %% In-Process Term Storage
 %%
-%% The library provides hashtable-like interface to manipulate data distributed 
-%% across Erlang processes.
+%% The library provides hashtable-like interface to manipulate data 
+%% distributed through Erlang processes.
 %%
 
 %%
@@ -36,23 +36,23 @@
 %% Hashtable
 -export([put/2, get/2, remove/2]).
 %%
-%% Map/Fold
+%% map/fold
 -export([map/2, fold/3]).
 %%
-%% Process interface
--export([attach/1, detach/1, notify/2]).
+%% OTP process interface
+-export([attach/1, detach/1]).
 
 %%
-%% internal record, pts-table metadata
+%% internal record, pts metadata
 -record(pts, {
-   ns,       % table id / namesppace
-   keypos,   % position of key element within tuple (default 1)
-   async,    % asynchronous I/O
-   readonly, % write operations are disabled
-   supervise,% processes supervised
-   timeout,  % process timeout operation
-   factory,  % factory function  
-   entry     % entry specific settings
+   ns        :: atom(),       % table id / namesppace
+   keypos    :: integer(),    % position of key element within tuple (default 1)
+   async     :: boolean(),    % asynchronous I/O (write are not blocked)
+   readonly  :: boolean(),    % write operations are disabled
+   timeout   :: integer(),    % process timeout operation
+   iftype    :: server | fsm, % interface type
+   factory   :: function(),   % factory function  
+   entity    :: list()        % entity specific arguments, suppied to factory
 }).
 
 %%-----------------------------------------------------------------------------
@@ -65,7 +65,7 @@
 %% new(Ns, Opts) -> ok
 %%    Name = term()
 %%    Opts = [Option]
-%%    Opt  = {keypos,  integer()} | async | readonly | supervise |
+%%    Opt  = {keypos,  integer()} | async | readonly | 
 %%           {timeout, integer()} | {factory fun()}
 %%
 %% Creates a new namespace
@@ -81,10 +81,10 @@ new(Ns, Opts) ->
             keypos   = proplists:get_value(keypos, Opts, 1),
             async    = proplists:is_defined(async, Opts),
             readonly = proplists:is_defined(readonly, Opts),
-            %supervise= proplists:is_defined(supervise, Opts),
             timeout  = proplists:get_value(timeout, Opts, 5000),
+            iftype   = proplists:get_value(iftype, Opts, server),
             factory  = proplists:get_value(factory, Opts),
-            entry    = proplists:get_value(entry, Opts, [])
+            entity   = proplists:get_value(entry, Opts, [])
          }),
          ok;
       _  -> 
@@ -113,7 +113,7 @@ i() ->
 %%
 %% i(Tab) -> {ok, Meta} | {error, Reason}
 %%
-%% return meta datafor given table
+%% return meta data for given table
 i(Ns) ->
    case ets:lookup(pts_table, Ns) of
       [T] -> {ok, T};
@@ -154,13 +154,12 @@ create(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{factory  = F, keypos = Pos, timeout = T1, entry = E}] ->
-         Key = erlang:element(Pos, Val),
+      [#pts{factory  = F, timeout = T} = S] ->
+         Key = erlang:element(S#pts.keypos, Val),
          case pns:whereis({Ns, Key}) of
             undefined ->
-               %% Note
-               {ok, Pid} = pts_prot:req(F, {create, E, {Ns, Key}}, T1),
-               pts_prot:req(Pid, {put, nil, Val}, T1);
+               {ok, Pid} = F([pts, self(), {Ns, Key}] ++ S#pts.entity),
+               tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T);
             _ ->
                {error, duplicate}
          end
@@ -171,10 +170,10 @@ read(Ns, Key) ->
    case ets:lookup(pts_table, Ns) of
       [] ->
          {error, no_namespace};
-      [#pts{timeout = T1}] ->
+      [#pts{timeout = T} = S] ->
          case pns:whereis({Ns, Key}) of
             undefined -> {error, not_found};
-            Pid       -> pts_prot:req(Pid, {get, {Ns,Key}}, T1)
+            Pid       -> tx({S#pts.iftype, false}, Pid, {get, {Ns,Key}}, T)
          end
    end.
    
@@ -187,11 +186,11 @@ update(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{keypos = Pos, timeout = T1}] ->
-         Key = erlang:element(Pos, Val),
+      [#pts{timeout = T} = S] ->
+         Key = erlang:element(S#pts.keypos, Val),
          case pns:whereis({Ns, Key}) of
-            undefined -> {error, {not_found, {Ns, Key}}};
-            Pid       -> pts_prot:req(Pid, {put, nil, Val}, T1)
+            undefined -> {error, not_found};
+            Pid       -> tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T)
          end
    end.
    
@@ -204,10 +203,10 @@ delete(Ns, Key) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{timeout = T1}] ->
+      [#pts{timeout = T} = S] ->
          case pns:whereis({Ns, Key}) of
             undefined -> ok;
-            Pid       -> pts_prot:req(Pid, {remove, nil, {Ns,Key}}, T1)
+            Pid       -> tx({S#pts.iftype, S#pts.async}, Pid, {remove, {Ns,Key}}, T)
          end
    end.
    
@@ -227,14 +226,14 @@ put(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{factory  = F, keypos = Pos, timeout = T1, entry = E}] ->
-         Key = erlang:element(Pos, Val),
+      [#pts{factory  = F, timeout = T} = S] ->
+         Key = erlang:element(S#pts.keypos, Val),
          case pns:whereis({Ns, Key}) of
             undefined ->
-               {ok, Pid} = pts_prot:req(F, {create, E, {Ns, Key}}, T1),
-               pts_prot:req(Pid, {put, nil, Val}, T1);
+               {ok, Pid} = F([pts, self(), {Ns, Key}] ++ S#pts.entity),
+               tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T);
             Pid ->
-               pts_prot:req(Pid, {put, val,  Val}, T1)
+               tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T)
          end
    end.   
    
@@ -261,10 +260,10 @@ remove(Ns, Key) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{timeout = T1}] ->
+      [#pts{timeout = T} = S] ->
          case pns:whereis({Ns, Key}) of
             undefined -> ok;
-            Pid       -> pts_prot:req(Pid, {remove, val, {Ns,Key}}, T1)
+            Pid       -> tx({S#pts.iftype, S#pts.async}, Pid, {remove, {Ns,Key}}, T)
          end
    end.
    
@@ -274,10 +273,10 @@ remove(Ns, Key) ->
 map(Ns, Fun) ->   
    case ets:lookup(pts_table, Ns) of
       []   -> {error, no_namespace};
-      [#pts{timeout = T1}] -> 
+      [#pts{timeout = T} = S] -> 
          pns:map(Ns, 
             fun({{_, Key}, Pid}) ->
-               Get = fun() -> pts_prot:req(Pid, {get, {Ns, Key}}, T1) end,
+               Get = fun() -> tx({S#pts.iftype, false}, Pid, {get, {Ns, Key}}, T) end,
                Fun({Key, Get})
             end
          )
@@ -289,10 +288,10 @@ map(Ns, Fun) ->
 fold(Ns, Acc, Fun) ->   
    case ets:lookup(pts_table, Ns) of
       []   -> {error, no_namespace};
-      [#pts{timeout = T1}] -> 
+      [#pts{timeout = T} = S] -> 
          pns:fold(Ns, Acc, 
             fun({{_, Key}, Pid}, A) ->
-               Get = fun() -> pts_prot:req(Pid, {get, {Ns, Key}}, T1) end,
+               Get = fun() -> tx({S#pts.iftype, false}, Pid, {get, {Ns, Key}}, T) end,
                Fun({Key, Get}, A)
             end
          )
@@ -327,17 +326,22 @@ detach({Ns, _} = Key) ->
       [_] -> pns:unregister(Key);
       _   -> {error, no_table}
    end.
-   
-%%
-%% 
-%% notify transaction
-notify({Pid, _} = Tx, Rsp) ->
-   erlang:send(Pid, {pts, Tx, Rsp}).   
-   
+      
 %%-----------------------------------------------------------------------------
 %%
 %% private
 %%
 %%-----------------------------------------------------------------------------
 
+tx({server, false}, Pid, Tx, T) ->
+   gen_server:call(Pid, Tx, T);
+
+tx({server, true}, Pid, Tx, _) ->
+   gen_server:cast(Pid, Tx);
+
+tx({fsm, false}, Pid, Tx, T) ->
+   gen_fsm:sync_send_event(Pid, Tx, T);
+
+tx({fsm, true}, Pid, Tx, _) ->
+   gen_fsm:send_event(Pid, Tx).   
          

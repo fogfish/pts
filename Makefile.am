@@ -16,12 +16,12 @@
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 #  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 #
-SUBDIRS = test examples
+SUBDIRS = test priv
+ERL_FLAGS = +P 90000000
 
 pts_SRC = \
    src/pts.erl \
    src/pns.erl \
-   src/pts_prot.erl \
    src/pts_sup.erl \
    src/pts_app.erl
 
@@ -31,9 +31,6 @@ nobase_pkgliberl_SCRIPTS = \
 
 CLEANFILES = $(nobase_pkgliberl_SCRIPTS)
 EXTRA_DIST = $(pts_SRC)
-
-run-example:
-	$(ERL) -pa ./ebin -pa ./examples/ebin +P 90000000
 
 @MAKE_GNUWEB@
 

@@ -159,6 +159,7 @@ ERLANG_APPS = @ERLANG_APPS@
 ERLANG_LIBS = @ERLANG_LIBS@
 ERLC = @ERLC@
 ERLCFLAGS = @ERLCFLAGS@
+ESCRIPT = @ESCRIPT@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -219,6 +220,7 @@ mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pkgliberldir = @pkgliberldir@
+pkglibprivdir = @pkglibprivdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
@@ -249,11 +251,11 @@ top_srcdir = @top_srcdir@
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 #  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 #
-SUBDIRS = test examples
+SUBDIRS = test priv
+ERL_FLAGS = +P 90000000
 pts_SRC = \
    src/pts.erl \
    src/pns.erl \
-   src/pts_prot.erl \
    src/pts_sup.erl \
    src/pts_app.erl
 
@@ -809,9 +811,6 @@ uninstall-am: uninstall-nobase_pkgliberlSCRIPTS
 	pdf-am ps ps-am tags tags-recursive uninstall uninstall-am \
 	uninstall-nobase_pkgliberlSCRIPTS
 
-
-run-example:
-	$(ERL) -pa ./ebin -pa ./examples/ebin +P 90000000
 
 @MAKE_GNUWEB@
 

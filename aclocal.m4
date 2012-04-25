@@ -888,8 +888,9 @@ AC_DEFUN([ACX_ERLANG],[
    AC_SUBST(CONF2LIB)
    
    erlang_path=$with_erlang:$with_erlang/bin:$PATH
-   AC_PATH_PROG([ERLC], [erlc], [], [$erlang_path])
-   AC_PATH_PROG([ERL],  [erl],  [], [$erlang_path])
+   AC_PATH_PROG([ERLC],   [erlc],    [], [$erlang_path])
+   AC_PATH_PROG([ERL],    [erl],     [], [$erlang_path])
+   AC_PATH_PROG([ESCRIPT],[escript], [], [$erlang_path])
    
    if test "x$ERLC" == "x" ; then
       AC_ERROR("Erlang runtime not found.")
@@ -907,6 +908,7 @@ AC_DEFUN([ACX_ERLANG],[
 
    ACX_DEFINE_DIR([liberldir],    $liberlroot, [])
    ACX_DEFINE_DIR([pkgliberldir], $liberlroot, [$PACKAGE]-[$VERSION])
+   ACX_DEFINE_DIR([pkglibprivdir], $liberlroot, [$PACKAGE]-[$VERSION]/priv)
    
    
    ACX_CHECK_ERLANG_LIB([erts])
@@ -1147,6 +1149,10 @@ ifndef ERL_CFLAGS
    ERL_CFLAGS =
 endif
 
+ifndef ERL_FLAGS
+   ERL_FLAGS =
+endif
+
 ifeq (\$(BUILD),native)
    ERL_CFLAGS += +native
 endif
@@ -1156,6 +1162,11 @@ ifeq (\$(BUILD),debug)
 endif
    
 ERL_PATH = -pa ../*/ebin -pa ./*/ebin
+
+%%: %%.escript
+	\$(AM_V_ERL)\$(ESCRIPT) -s \$< && \
+	cp \$< \x24@ && \
+	chmod a+x \x24@
    
 ebin/%%.beam : src/%%.erl
 	\$(AM_V_ERL)test -d ebin || mkdir ebin; \$(ERLC) \$(ERL_CFLAGS) -I ./include -b beam -o ebin \$<
@@ -1203,7 +1214,7 @@ debug:
 	\$(MAKE) BUILD=debug	
 	
 run:
-	\$(ERL) -pa ./ebin  -pa ./*/ebin -pa ../*/ebin -pa ./priv -pa ../*/priv
+	\$(ERL) -pa ./ebin  -pa ./*/ebin -pa ../*/ebin -pa ./priv -pa ../*/priv \$(ERL_FLAGS)
 
 .force:
 

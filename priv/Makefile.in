@@ -15,25 +15,6 @@
 
 @SET_MAKE@
 
-#
-#   Copyright (c) 2012, Dmitry Kolesnikov
-#   All Rights Reserved.
-#
-#  This library is free software; you can redistribute it and/or modify
-#  it under the terms of the GNU Lesser General Public License, version 3.0
-#  as published by the Free Software Foundation (the "License").
-#
-#  Software distributed under the License is distributed on an "AS IS"
-#  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
-#  the License for the specific language governing rights and limitations
-#  under the License.
-# 
-#  You should have received a copy of the GNU Lesser General Public
-#  License along with this library; if not, write to the Free Software
-#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-#  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
-#
-
 VPATH = @srcdir@
 pkgdatadir = $(datadir)/@PACKAGE@
 pkgincludedir = $(includedir)/@PACKAGE@
@@ -51,7 +32,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-subdir = examples
+subdir = priv
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -119,6 +100,7 @@ ERLANG_APPS = @ERLANG_APPS@
 ERLANG_LIBS = @ERLANG_LIBS@
 ERLC = @ERLC@
 ERLCFLAGS = @ERLCFLAGS@
+ESCRIPT = @ESCRIPT@
 INSTALL = @INSTALL@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -179,6 +161,7 @@ mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pkgliberldir = @pkgliberldir@
+pkglibprivdir = @pkglibprivdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
@@ -190,16 +173,35 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+
+#
+#   Copyright (c) 2012, Dmitry Kolesnikov
+#   All Rights Reserved.
+#
+#  This library is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU Lesser General Public License, version 3.0
+#  as published by the Free Software Foundation (the "License").
+#
+#  Software distributed under the License is distributed on an "AS IS"
+#  basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+#  the License for the specific language governing rights and limitations
+#  under the License.
+# 
+#  You should have received a copy of the GNU Lesser General Public
+#  License along with this library; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+#  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
+#
+cache_USE = pts
 cache_SRC = \
-   src/cache.erl \
-   src/cache_app.erl \
-   src/cache_sup.erl \
-   src/cache_entry.erl \
-   src/cache_entry_sup.erl
+   cache/cache.erl \
+   cache/cache_app.erl \
+   cache/cache_sup.erl \
+   cache/cache_entry.erl \
+   cache/cache_entry_sup.erl
 
 nobase_pkgliberl_SCRIPTS = \
-   ebin/cache.app \
-   $(cache_BEAM)
+   ebin/cache.app
 
 CLEANFILES = $(nobase_pkgliberl_SCRIPTS)
 EXTRA_DIST = $(cache_SRC)
@@ -215,9 +217,9 @@ $(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu examples/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu priv/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu examples/Makefile
+	  $(AUTOMAKE) --gnu priv/Makefile
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
