@@ -31,7 +31,7 @@
 -export([new/1, new/2, drop/1, i/0, i/1, i/2]).
 %%
 %% CRUD
--export([create/2, read/2, update/2, delete/2]).
+-export([spawn/2, create/2, read/2, update/2, delete/2]).
 %%
 %% Hashtable
 -export([put/2, get/2, remove/2]).
@@ -84,7 +84,7 @@ new(Ns, Opts) ->
             timeout  = proplists:get_value(timeout, Opts, 5000),
             iftype   = proplists:get_value(iftype, Opts, server),
             factory  = proplists:get_value(factory, Opts),
-            entity   = proplists:get_value(entry, Opts, [])
+            entity   = proplists:get_value(entity, Opts, [])
          }),
          ok;
       _  -> 
@@ -142,6 +142,25 @@ i(Ns, Prop) ->
 %% CRUD
 %%
 %%-----------------------------------------------------------------------------
+
+%%
+%% spawn(Ns, Key) -> {ok, Pid} | {error, Reason}
+spawn(Ns, Key) ->
+   case ets:lookup(pts_table, Ns) of
+      [] ->
+         {error, no_namespace};
+      [#pts{readonly = true}] ->
+         {error, readonly};
+      [#pts{factory  = undefined}] ->
+         {error, readonly};
+      [#pts{factory  = F} = S] ->
+         case pns:whereis({Ns, Key}) of
+            undefined ->
+               F([pts, self(), {Ns, Key}] ++ S#pts.entity);
+            _ ->
+               {error, duplicate}
+         end
+   end.
 
 %%
 %% create(Ns, Val) -> ok | {error, Reason}
