@@ -47,12 +47,13 @@
 -record(pts, {
    ns        :: atom(),       % table id / namesppace
    keypos    :: integer(),    % position of key element within tuple (default 1)
+   keylen    :: integer() | inf, % length of key 
    async     :: boolean(),    % asynchronous I/O (write are not blocked)
    readonly  :: boolean(),    % write operations are disabled
    timeout   :: integer(),    % process timeout operation
    iftype    :: server | fsm, % interface type
-   factory   :: function(),   % factory function  
-   entity    :: list()        % entity specific arguments, suppied to factory
+   rthrough  :: boolean(),    % read-through
+   factory   :: function()    % factory function  
 }).
 
 %%-----------------------------------------------------------------------------
@@ -79,12 +80,13 @@ new(Ns, Opts) ->
          ets:insert(pts_table, #pts{
             ns       = Ns,
             keypos   = proplists:get_value(keypos, Opts, 1),
+            keylen   = proplists:get_value(keylen, Opts, inf),
             async    = proplists:is_defined(async, Opts),
             readonly = proplists:is_defined(readonly, Opts),
             timeout  = proplists:get_value(timeout, Opts, 5000),
             iftype   = proplists:get_value(iftype, Opts, server),
-            factory  = proplists:get_value(factory, Opts),
-            entity   = proplists:get_value(entity, Opts, [])
+            rthrough = proplists:is_defined(rthrough, Opts),
+            factory  = proplists:get_value(factory, Opts)
          }),
          ok;
       _  -> 
@@ -153,10 +155,10 @@ spawn(Ns, Key) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{factory  = F} = S] ->
-         case pns:whereis({Ns, Key}) of
+      [#pts{factory  = F, keylen = Len}] ->
+         case pns:whereis({Ns, key(Key, Len)}) of
             undefined ->
-               F([pts, self(), {Ns, Key}] ++ S#pts.entity);
+               F([{self(), {Ns, key(Key, Len)}}]);
             _ ->
                {error, duplicate}
          end
@@ -173,11 +175,11 @@ create(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{factory  = F, timeout = T} = S] ->
+      [#pts{factory  = F, timeout = T, keylen = Len} = S] ->
          Key = erlang:element(S#pts.keypos, Val),
-         case pns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, key(Key, Len)}) of
             undefined ->
-               {ok, Pid} = F([pts, self(), {Ns, Key}] ++ S#pts.entity),
+               {ok, Pid} = F([{self(), {Ns, key(Key, Len)}}]),
                tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T);
             _ ->
                {error, duplicate}
@@ -189,8 +191,14 @@ read(Ns, Key) ->
    case ets:lookup(pts_table, Ns) of
       [] ->
          {error, no_namespace};
-      [#pts{timeout = T} = S] ->
-         case pns:whereis({Ns, Key}) of
+      [#pts{rthrough = true, factory  = F, timeout = T, keylen = Len} = S] ->
+         {ok, Pid} = case pns:whereis({Ns, key(Key, Len)}) of
+            undefined -> F([{self(), {Ns, key(Key, Len)}}]);
+            Kpid       -> {ok, Kpid}
+         end,
+         tx({S#pts.iftype, false}, Pid, {get, {Ns,Key}}, T);
+      [#pts{timeout = T, keylen = Len} = S] ->
+         case pns:whereis({Ns, key(Key, Len)}) of
             undefined -> {error, not_found};
             Pid       -> tx({S#pts.iftype, false}, Pid, {get, {Ns,Key}}, T)
          end
@@ -205,9 +213,9 @@ update(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{timeout = T} = S] ->
+      [#pts{timeout = T, keylen = Len} = S] ->
          Key = erlang:element(S#pts.keypos, Val),
-         case pns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, key(Key, Len)}) of
             undefined -> {error, not_found};
             Pid       -> tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T)
          end
@@ -222,8 +230,8 @@ delete(Ns, Key) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{timeout = T} = S] ->
-         case pns:whereis({Ns, Key}) of
+      [#pts{timeout = T, keylen = Len} = S] ->
+         case pns:whereis({Ns, key(Key, Len)}) of
             undefined -> ok;
             Pid       -> tx({S#pts.iftype, S#pts.async}, Pid, {remove, {Ns,Key}}, T)
          end
@@ -245,11 +253,11 @@ put(Ns, Val) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{factory  = F, timeout = T} = S] ->
+      [#pts{factory  = F, timeout = T, keylen = Len} = S] ->
          Key = erlang:element(S#pts.keypos, Val),
-         case pns:whereis({Ns, Key}) of
+         case pns:whereis({Ns, key(Key, Len)}) of
             undefined ->
-               {ok, Pid} = F([pts, self(), {Ns, Key}] ++ S#pts.entity),
+               {ok, Pid} = F([{self(), {Ns, key(Key, Len)}}]),
                tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T);
             Pid ->
                tx({S#pts.iftype, S#pts.async}, Pid, {put, Val}, T)
@@ -279,8 +287,8 @@ remove(Ns, Key) ->
          {error, readonly};
       [#pts{factory  = undefined}] ->
          {error, readonly};
-      [#pts{timeout = T} = S] ->
-         case pns:whereis({Ns, Key}) of
+      [#pts{timeout = T, keylen = Len} = S] ->
+         case pns:whereis({Ns, key(Key, Len)}) of
             undefined -> ok;
             Pid       -> tx({S#pts.iftype, S#pts.async}, Pid, {remove, {Ns,Key}}, T)
          end
@@ -363,4 +371,19 @@ tx({fsm, false}, Pid, Tx, T) ->
 
 tx({fsm, true}, Pid, Tx, _) ->
    gen_fsm:send_event(Pid, Tx).   
-         
+     
+%% transforms key         
+key(Key, inf) ->
+   Key;
+key(Key,   1) when is_tuple(Key) ->   
+   element(1, Key);
+key(Key, Len) when is_tuple(Key) ->
+   list_to_tuple(
+      lists:sublist(
+         tuple_to_list(Key),
+         Len
+      )
+   );
+key(Key, _) ->
+   Key.
+
