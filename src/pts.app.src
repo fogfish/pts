@@ -1,0 +1,20 @@
+{application, pts,
+   [
+      {description, "process term storage"},
+      {vsn, "0.4.2"},
+      {modules, [
+         pts,
+         pns,
+         pts_sup,
+         pts_app
+      ]},
+      {registered, []},
+      {applications, [
+         kernel,
+         stdlib
+      ]},
+      {mod, {pts_app, []}},
+      {env, [
+      ]}
+   ]
+}.

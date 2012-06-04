@@ -178,7 +178,7 @@ fold(Ns0, Acc0, Fun) ->
 %% check 
 is_uid_alive(Uid) when is_pid(Uid) ->
    is_process_alive(Uid);
-is_uid_alive(Uid) ->
+is_uid_alive(_) ->
    true.
 
 
@@ -205,8 +205,8 @@ new(_Ns, Opts) ->
    
 %%
 %%
-drop(Ns) ->
-   ets:delete(Ns),
-   ok.
+%drop(Ns) ->
+%   ets:delete(Ns),
+%   ok.
 
    
