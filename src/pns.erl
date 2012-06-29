@@ -141,14 +141,14 @@ whatis(Ns, Pid) ->
 %%   Fun = fun({Uid, Pid}) -> ...
 map(Fun) ->
    qlc:e(
-      qlc:q([ Fun(X) || X <- ets:table(?REGISTRY)])
+      qlc:q([ Fun({Key, Pid}) || {Key, Pid} <- ets:table(?REGISTRY), is_process_alive(Pid) ])
    ).   
    
 map(Ns0, Fun) ->
    qlc:e(
       qlc:q([ 
          Fun({{Ns, X}, Pid}) 
-         || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0
+         || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0, is_process_alive(Pid)
       ])
    ).
    
