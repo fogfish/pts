@@ -370,8 +370,15 @@ tx({fsm, false}, Pid, Tx, T) ->
    gen_fsm:sync_send_event(Pid, Tx, T);
 
 tx({fsm, true}, Pid, Tx, _) ->
-   gen_fsm:send_event(Pid, Tx).   
-     
+   gen_fsm:send_event(Pid, Tx);
+
+tx({raw, false}, Pid, Tx, T) ->
+   gen:call(Pid, pts, Tx, T);
+
+tx({raw,  true}, Pid, Tx, _) ->
+   erlang:send(Pid, Tx).    
+
+
 %% transforms key         
 key(Key, inf) ->
    Key;

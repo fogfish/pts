@@ -1,0 +1,8 @@
+[
+   {kvs, kv8_pts, []},
+   {keyspace, 100},
+   {workload, [
+      {put, 1000, 512},
+      {get, 1000}
+   ]}
+].

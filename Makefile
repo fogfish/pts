@@ -24,6 +24,9 @@ docs:
 dialyzer: compile
 	@dialyzer -Wno_return -c apps/riak_kv/ebin
 
+run:
+	erl -pa ./deps/*/ebin -pa ./ebin
+
 rebar:
 	curl -O http://cloud.github.com/downloads/basho/rebar/rebar
 	chmod ugo+x rebar

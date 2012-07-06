@@ -6,5 +6,7 @@
 *.tag.gz
 *.tgz
 ebin/
+deps/
+.eunit/
 rebar
 *.sublime-*
