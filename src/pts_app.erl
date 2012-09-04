@@ -19,20 +19,15 @@
 -module(pts_app).
 -author(dmkolesnikov@gmail.com).
 
--export([
-   start/2,
-   stop/1
-]).
+-export([start/2, stop/1]).
 
 
 start(_Type, _Args) ->
    case pts_sup:start_link() of
       {ok, Pid} ->
-         ok = pns:start(),
-         % meta data for pts tables
-         ets:new(pts_table, 
-            [ordered_set, public, named_table, {read_concurrency, true}, {keypos, 2}]
-         ),
+         % define global tables
+         ets:new(pns, [named_table, public, ordered_set, {write_concurrency, true}]),
+         ets:new(pts, [named_table, public, ordered_set, {keypos, 2}, {read_concurrency, true}]),
          {ok, Pid};
       Err ->
          Err

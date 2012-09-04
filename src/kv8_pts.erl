@@ -1,60 +1,39 @@
 -module(kv8_pts).
 
--export([init/1, free/1, put/3, get/2]).
+-export([start/1, stop/1, init/1, free/1, put/3, get/2]).
 
 %%
 %%
-init(_) ->
-   application:start(pts),
-   pts:new(kv8, [
-      async,      % async interface 
-      rthrough,   % read through
-      {iftype,   raw},
-      {factory,  fun factory/1}
-   ]),
+start(Opts) ->
+   pts:new(kv8, [{factory, fun pts_cache_sup:spawn/2} | Opts]),
    kv8.
 
 %%
 %%
-free(Ref) ->
+stop(Ref) ->
    pts:drop(Ref).
 
 %%
 %%
-put(Ref, Key, Val) ->
-   pts:create(Ref, {Key, Val}),
-   ok.
+init(Ref) ->
+   Ref. 
 
 %%
 %%
-get(Ref, Key) ->
-   case pts:read(Ref, Key) of
-      {ok, Val} -> {ok, Val};
-      _         -> {error, not_found}
-   end.
+free(Ref) ->
+   Ref.
+
+%%
+%%
+put(Key, Val, Ref) ->
+   pts:put(Ref, Key, Val).
+
+%%
+%%
+get(Key, Ref) ->
+   pts:get(Ref, Key).
 
 
-
-factory([{_, Key}]) ->
-   Pid = spawn(
-      fun() ->
-      	pts:attach(Key),
-      	loop(undefined)
-      end
-   ),
-   {ok, Pid}.
-
-loop(S) ->
-   receive
-      {put, {_, Val}} ->
-   	     loop(Val);
-      {pts, Tx, {get, _}} ->
-         gen:reply(Tx, {ok, S}),
-         loop(S);
-      M -> 
-         io:format('got: ~p~n', [M]),
-         loop(S)
-   end.
 
 
    

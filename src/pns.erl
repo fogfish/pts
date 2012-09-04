@@ -23,87 +23,36 @@
 -author(dmkolesnikov@gmail.com).
 -include_lib("stdlib/include/qlc.hrl").
 
-%%
-%% Max Theoretical scalability demand at 32-bit arch is 268435456 entries
-%%
-
--export([
-   start/0,
-   register/1,
-   register/2,
-   register/3,
-   unregister/1,
-   unregister/2,
-   whereis/1,
-   whereis/2,
-   whatis/1,
-   whatis/2,
-   map/1,
-   map/2,
-   fold/2,
-   fold/3
-]).
+-export([register/2, register/3, unregister/2, whereis/2, whatis/2, map/2, fold/3]).
 
 %%
-%% core opts for namespace
--define(CORE_OPTS, [
-   ordered_set,
-   {write_concurrency, true}
-]).
-
-%%
-%% default Namespace
--define(REGISTRY, pts_local).
-
-%%
-%%
-%%
-start() ->
-   new(?REGISTRY),
-   ok.
-
-
-
-%%
-%% register(Uid, Pid) -> ok
+%% register(Ns, Uid, Pid) -> ok
+%% register(Ns, Uid)
 %%   Ns  = atom()
 %%   Uid = term()
 %%
 %% Associates Uid with a Pid of current process.
 %% Failes with badarg is assotiation exists and assotaited process is alive
 %%
-register(Uid) ->
-   ?MODULE:register(Uid, self()).
-register(Ns,  Uid, Pid) ->
-   ?MODULE:register({Ns, Uid}, Pid).
-register(Uid, Pid) ->
-   case ets:insert_new(?REGISTRY, {Uid, Pid}) of
-      true  -> 
+register(Ns, Uid) ->
+   ?MODULE:register(Ns, Uid, self()).
+register(Ns, Uid, Pid) ->
+   case ?MODULE:whereis(Ns, Uid) of
+      undefined -> 
+         true = ets:insert_new(pns, {{Ns, Uid}, Pid}),
          ok;
-      false ->
-         % entry exists but it shall allow to insert 
-         % an assotiation if old process is dead
-         case ?MODULE:whereis(Uid) of
-            undefined -> 
-               ets:insert(?REGISTRY, {Uid, Pid}),
-               ok;
-            Pid1 ->
-               if
-                  Pid  =:= Pid1 -> ok;
-                  true          -> throw(badarg)
-               end
-         end
-   end.
-
+      Old when Old =:= Pid ->
+         ok;
+      _ ->
+         throw(badarg)
+   end. 
 
 %%
 %% unregister(Ns, Uid) -> ok
 %%
 %% Removes the registered Uid associatation with a Pid.
 unregister(Ns, Uid) ->
-   ?MODULE:unregister({Ns, Uid}).
-unregister(Uid) ->
-   ets:delete(?REGISTRY, Uid),
+   ets:delete(pns, {Ns, Uid}),
    ok.
 
 %%
@@ -112,11 +61,8 @@ unregister(Uid) ->
 %% Returns the Pid assotiated with Uid. 
 %% Returns undefined if the name is not registered.   
 whereis(Ns, Uid) ->
-   ?MODULE:whereis({Ns, Uid}).
-   
-whereis(Uid) ->
-   case ets:lookup(?REGISTRY, Uid) of
-      [{Uid, Pid}] ->
+   case ets:lookup(pns, {Ns, Uid}) of
+      [{_, Pid}] ->
          case is_uid_alive(Pid) of
             true  -> Pid;
             false -> undefined
@@ -130,40 +76,27 @@ whereis(Uid) ->
 %%
 %% Returns the Uid assotiated with Pid, (reversive lookup)
 %% Returns undefined if the Pid not found
-whatis(Pid) ->
-   ets:select(?REGISTRY, [{{'$1', Pid}, [], ['$1']}]).
-   
 whatis(Ns, Pid) ->
-   ets:select(?REGISTRY, [{{{Ns, '$1'}, Pid}, [], [{Ns, '$1'}]}]).
+   ets:select(pns, [{{{Ns, '$1'}, Pid}, [], ['$1']}]).
    
 %%
 %% map(Ns, Fun) -> [...]
 %%   Fun = fun({Uid, Pid}) -> ...
-map(Fun) ->
-   qlc:e(
-      qlc:q([ Fun({Key, Pid}) || {Key, Pid} <- ets:table(?REGISTRY), is_process_alive(Pid) ])
-   ).   
-   
 map(Ns0, Fun) ->
    qlc:e(
       qlc:q([ 
-         Fun({{Ns, X}, Pid}) 
-         || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0, is_process_alive(Pid)
+         Fun({Uid, Pid}) 
+         || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_process_alive(Pid)
       ])
    ).
    
 %%
 %% foldl(Tab, Acc0, Fun) -> Acc
 %%
-fold(Acc0, Fun) ->
-   qlc:fold(Fun, Acc0, 
-      qlc:q([ X || X <- ets:table(?REGISTRY)])
-   ).
-
 fold(Ns0, Acc0, Fun) ->
    qlc:fold(Fun, Acc0, 
       qlc:q([ 
-         {{Ns, X}, Pid} || {{Ns, X}, Pid} <- ets:table(?REGISTRY), Ns =:= Ns0
+         {Uid, Pid} || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_process_alive(Pid)
       ])
    ).      
       
@@ -180,33 +113,5 @@ is_uid_alive(Uid) when is_pid(Uid) ->
    is_process_alive(Uid);
 is_uid_alive(_) ->
    true.
-
-
-%%
-%% new(Ns, Opts) -> Ref
-%%
-%% defines a new namespace, throws bagarg is namespace exists
-new(Ns) ->
-   new(Ns, []).
-   
-new(Ns, Opts) when is_atom(Ns) ->
-   Access = case lists:member(private, Opts) of
-      true  -> private;
-      false -> public
-   end,
-   ets:new(Ns, [Access, named_table | ?CORE_OPTS]);
-   
-new(_Ns, Opts) ->
-   Access = case lists:member(private, Opts) of
-      true  -> private;
-      false -> public
-   end,
-   ets:new(undefined, [Access | ?CORE_OPTS]).
-   
-%%
-%%
-%drop(Ns) ->
-%   ets:delete(Ns),
-%   ok.
 
    

@@ -29,80 +29,59 @@
 
 
 start_test() ->
-   ok = pns:start().
+   application:start(pts).
    
 register_test() ->
    ?assert(
-      ok =:= pns:register(?KEY1, self())
+      ok =:= pns:register(?NS1, ?KEY1, self())
    ),
    ?assert(
-      ok =:= pns:register(?KEY2, self())
-   ),
-   ?assert(
-      ok =:= pns:register(?NS1, ?KEY2, self())
+      ok =:= pns:register(?NS2, ?KEY2, self())
    ).
    
 whereis_test() ->
    ?assert(
-      self() =:= pns:whereis(?KEY1)
+      self() =:= pns:whereis(?NS1, ?KEY1)
    ),
    ?assert(
-      self() =:= pns:whereis(?KEY2)
+      self() =:= pns:whereis(?NS2, ?KEY2)
    ),
    ?assert(
-      self() =:= pns:whereis(?NS1, ?KEY2)
-   ),
-   ?assert(
-      self() =:= pns:whereis({?NS1, ?KEY2})
-   ),
-   ?assert(
-      undefined =:= pns:whereis(?KEY3)
-   ),
-   ?assert(
-      undefined =:= pns:whereis(?NS2, ?KEY2)
-   ),
-   ?assert(
-      undefined =:= pns:whereis({?NS2, ?KEY2})
+      undefined =:= pns:whereis(?NS1, ?KEY3)
    ).
    
 whatis_test() ->
-   Keys = pns:whatis(self()),
-   ?assert(lists:member(?KEY1, Keys)),
-   ?assert(lists:member(?KEY2, Keys)),
-   ?assert(lists:member({?NS1, ?KEY2}, Keys)),
-   ?assert(not lists:member(?KEY3, Keys)),
-   ?assert(not lists:member({?NS2, ?KEY2}, Keys)).
+   Keys1 = pns:whatis(?NS1, self()),
+   ?assert(lists:member(?KEY1, Keys1)),
+   ?assert(not lists:member(?KEY2, Keys1)),
+
+   Keys2 = pns:whatis(?NS2, self()),
+   ?assert(not lists:member(?KEY1, Keys2)),
+   ?assert(lists:member(?KEY2, Keys2)).
    
 map_test() ->
-   Keys = pns:map(fun({Uid, _}) -> Uid end),
-   ?assert(lists:member(?KEY1, Keys)),
-   ?assert(lists:member(?KEY2, Keys)),
-   ?assert(lists:member({?NS1, ?KEY2}, Keys)),
-   ?assert(not lists:member(?KEY3, Keys)),
-   ?assert(not lists:member({?NS2, ?KEY2}, Keys)),
-   ?assert(
-      [{?NS1, ?KEY2}] =:= pns:map(?NS1, fun({Uid, _}) -> Uid end)
-   ).
+   Keys1 = pns:map(?NS1, fun({Uid, _}) -> Uid end),
+   ?assert(lists:member(?KEY1, Keys1)),
+   ?assert(not lists:member(?KEY2, Keys1)),
+
+   Keys2 = pns:map(?NS2, fun({Uid, _}) -> Uid end),
+   ?assert(not lists:member(?KEY1, Keys2)),
+   ?assert(lists:member(?KEY2, Keys2)).
    
 fold_test() ->   
-   Keys = pns:fold([], fun({Uid, _}, A) -> [Uid | A] end),
-   ?assert(lists:member(?KEY1, Keys)),
-   ?assert(lists:member(?KEY2, Keys)),
-   ?assert(lists:member({?NS1, ?KEY2}, Keys)),
-   ?assert(not lists:member(?KEY3, Keys)),
-   ?assert(not lists:member({?NS2, ?KEY2}, Keys)),
-   ?assert(
-      [{?NS1, ?KEY2}] =:= pns:fold(?NS1, [], fun({Uid, _}, A) -> [Uid | A] end)
-   ).
+   Keys1 = pns:fold(?NS1, [], fun({Uid, _}, A) -> [Uid | A] end),
+   ?assert(lists:member(?KEY1, Keys1)),
+   ?assert(not lists:member(?KEY2, Keys1)),
+
+   Keys2 = pns:fold(?NS2, [], fun({Uid, _}, A) -> [Uid | A] end),
+   ?assert(not lists:member(?KEY1, Keys2)),
+   ?assert(lists:member(?KEY2, Keys2)).
    
 unregister_test() ->
    ?assert(
-      ok =:= pns:unregister(?KEY1)
+      ok =:= pns:unregister(?NS1, ?KEY1)
    ),
    ?assert(
-      ok =:= pns:unregister(?KEY2)
-   ),
-   ?assert(
-      ok =:= pns:unregister({?NS1, ?KEY2})
+      ok =:= pns:unregister(?NS2, ?KEY2)
    ).
    

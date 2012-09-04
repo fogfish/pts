@@ -34,6 +34,14 @@ init([]) ->
    {ok,
       {
          {one_for_one, 2, 60},
-         []
+         [cache()]
       }
+   }.
+
+
+cache() ->
+   {
+      pts_cache_sup,
+      {pts_cache_sup, start_link, []},
+      permanent, brutal_kill, supervisor, dynamic
    }.

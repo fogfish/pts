@@ -1,8 +1,0 @@
-%%
-%% kv8
-case os:getenv("KV8") of
-   "true" ->
-      lists:keymerge(1, CONFIG, [{deps, [{kv8, ".*", {git, "https://github.com/fogfish/kv8", {branch, master}}}]}]);
-   _ ->
-      CONFIG
-end.

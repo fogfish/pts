@@ -16,23 +16,18 @@
 %%  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
--module(cache_entry).
+-module(pts_cache).
 -behaviour(gen_server).
 -author(dmkolesnikov@gmail.com).
 
--export([
-   start_link/1,
-   %% gen_server
-   init/1, 
-   handle_call/3,
-   handle_cast/2, 
-   handle_info/2, 
-   terminate/2, 
-   code_change/3 
-]).
+-export([start_link/2]).
+%% gen_server
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -record(srv, {
    ttl,       % time-to-live in seconds
+   ns, 
+   uid, 
    key,       % key
    val        % value
 }).
@@ -40,38 +35,45 @@
 
 %%
 %%
-start_link(Req) ->
-  gen_server:start_link(?MODULE, Req, []).
+start_link(Ns, Uid) ->
+  gen_server:start_link(?MODULE, [Ns, Uid], []).
   
-init([pts, _, Key]) ->
-   pts:attach(Key),
-   {ok, 
-      #srv{
-         key=Key
-      }
-   }. 
+init([Ns, Uid]) ->
+   pns:register(Ns, Uid),
+   %io:format("spawn: ~p@~p~n", [Uid, Ns]),
+   {ok, #srv{ns=Ns, uid=Uid}}. 
    
-handle_call({put, Val}, _, S) ->
-   {reply, ok, S#srv{val = Val}};
-handle_call({get, _Key}, _, S) ->
-   {reply, {ok, S#srv.val}, S};
-handle_call({remove, _Key}, _, S) ->
-   {stop, normal, ok, S};
+%%
+%%
+handle_call(_, _Tx, S) ->
+   {noreply, S}.
 
-handle_call(_Req, _From, S) ->
-   {reply, undefined, S}.
-   
-handle_cast(_Req, State) ->
-   {noreply, State}.
- 
 %%
 %%
+handle_cast(_, S) ->
+   {noreply, S}.
+
+%%
+%%
+handle_info({put, Tx, Key, Val}, S) ->
+   gen_server:reply(Tx, ok),
+   %io:format("set ~p=~p~n", [Key, Val]),
+   {noreply, S#srv{key=Key, val=Val}};
+
+handle_info({get, Tx, _Key}, #srv{val=Val}=S) ->
+   gen_server:reply(Tx, {ok, Val}),
+   {noreply, S};
+
+handle_info({remove, Tx, _Key}, #srv{val=Val}=S) ->
+   gen_server:reply(Tx, ok),
+   {stop, normal, S};
+
 handle_info(timeout, S) ->
    {stop, normal, S}.
-   
-   
-terminate(_Reason, S) ->
-   pts:detach(S#srv.key),
+
+terminate(_Reason, #srv{ns=Ns, uid=Uid}) ->
+   pns:unregister(Ns, Uid),
+   %io:format("dies: ~p@~p~n", [Uid, Ns]),
    ok.
    
 code_change(_OldVsn, State, _Extra) ->

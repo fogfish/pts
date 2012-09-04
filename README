@@ -15,8 +15,8 @@ as published by the Free Software Foundation.
 Introduction
 ============
 
-   The library provides hashtable-like interface to manipulate data distributed 
-across Erlang processes.
+   The library provides hashtable-like interface to manage processes
+namespace, and read/write access the process state.
 
 
 Compile and build
@@ -26,33 +26,22 @@ Compile and build
 
    git clone https://github.com/fogfish/pts.git
    
-   Briefly, the shell command `./configure; make; make install' should 
-configure, build, and assembly distribution package. The following
-instructions are specific to this package; see the `INSTALL' file for
-instructions specific to GNU build tools. 
-
-   The `configure' shell script attempts to guess dependencies and system 
-configuration required to build library, the following build time dependencies exists:
-
-   --with-erlang={prefix_to_otp} supplied to `./configure' binds the library
-                                 with chosen Erlang runtime, if you have
-                                 multiple Erlang environments available at 
-                                 build machine
+   Briefly, the shell command `make' should configure and build, the library.
    
 Use-cases
 =========
 
    The library assumes existence of two type of processes `actors': 
    
-   * data owner is an Erlang/OTP process that holds chunk of data and operates
-   its life-cycle.   
+   * data owner is an Erlang/OTP process that holds chunk of data and 
+   manages its life-cycle.   
    
    * data consumer is process that leases data for transient operation
 
-   The contract between those actors are table and key, the table defines a data
-domain and key identifies a process that holds data. In other words, pts is like
-ets but each entry is kept is dedicated `data owner' process; the library just
-defines 
+   The contract between those actors are namespace and key, the namespace
+defines a data domain and key identifies a process that holds data. In other
+words, pts is like ets but each entry is kept is dedicated `data owner' process; the library defines 
+
    * an unified `data consumers' interface for data discovery and I/O
    
    * an unified asynchronous protocol for `data owners'
@@ -76,56 +65,129 @@ application.
    {ok, Value} = pts:get(mytable, mykey),
    
    %% clean up
-   pts:delete(mytable).
+   pts:drop(mytable).
    
 
 Protocol
 ========
    
-   Each `data owner' process has to be complient with asynchronous protocol: 
+   Each `data owner' process has to be complient with asynchronous protocol
+See reference implementation at src/pts_cache.erl: 
    
-   1. Create
-   ----init([pts, Own, Key])--->
-   <---{ok, Pid}----------------
+   1. Factory
+      The factory function shall take two parameters Namespace and Key 
 
-   2. Store data:
-   ----{put, Val}-------------->
-   <---ok-----------------------
+   2. Put
+      handle_info({put, Tx, Key, Val}, ...) ->
+         gen_server:reply(Tx, ok),
+         {noreply, ...}
 
-   2. Read data
-   ----{get, Key}-------------->
-   <---{ok, Val}}---------------
-   
-   3. Remove data
-   ----{remove, Key}----------->
-   <---ok-----------------------
-   
-   see the examples/cache_entry.erl for example.
+   3. Get
+      handle_info({get, Tx, Key}, ...) ->
+         gen_server:reply(Tx, {ok, Val}),
+         {noreply, ...}
+
+   4. Remove data
+      handle_info({remove, Tx, Key}, ...) ->
+         gen_server:reply(Tx, ok),
+         {stop, normal, ...}
    
    
 Performance
 ===========
 
-   Reference platform: MacMini, Lion Server, 2 GHz Intel Core i7, 4GB 1333 MHZ DDR3, erlang R15B
-   
-   pts is compared to ets for single `data consumer' over example cache 
-application. The 1KB data block(s) are used. 
+   The performance is estimated for storage containing 10000 key/value pairs.
+The key is md5 hash, the value is 1KB data block. 
 
-   version 0.4.x
-
-   Write    10       100        1000        10000
-   --------------------------------------------------
-   pts    1.591 ms  7.913 ms   65.434 ms   638.072 ms
-   ets    0.173 ms  1.232 ms   11.010 ms   127.469 ms
+   Hardware reference platform: MacMini, Lion Server, 2 GHz Intel Core i7, 8GB 1333 MHZ DDR3, erlang R15B
    
-   Read     10       100        1000        10000
-   --------------------------------------------------
-   pts    0.280 ms  1.785 ms   17.089 ms   190.390 ms
-   ets    0.135 ms  0.879 ms    7.839 ms    61.522 ms
+put by 10 process 10000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            1799.712
+Completed:              10000
+Failed:                 0 (0.00%)
+TPS:                    5556.4
+Latency (ms):           0.180
+IO tput (MB):           5.511 (9.918 written, 0.000 read)
+
+
+get by 10 process 10000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            140.799
+Completed:              10000
+Failed:                 0 (0.00%)
+TPS:                    71023.4
+Latency (ms):           0.014
+IO tput (MB):           70.443 (9.918 written, 0.000 read)
+
+
+get by 100 process 100000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            1171.940
+Completed:              100000
+Failed:                 0 (0.00%)
+TPS:                    85328.6
+Latency (ms):           0.012
+IO tput (MB):           84.631 (99.182 written, 0.000 read)
+
+
+get by 1000 process 1000000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            12538.887
+Completed:              1000000
+Failed:                 0 (0.00%)
+TPS:                    79751.9
+Latency (ms):           0.013
+IO tput (MB):           79.100 (991.821 written, 0.000 read)
+
+
+   pts is compared to ets with exactly same dataset
+
+put by 10 process 10000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            1691.288
+Completed:              10000
+Failed:                 0 (0.00%)
+TPS:                    5912.7
+Latency (ms):           0.169
+IO tput (MB):           5.864 (9.918 written, 0.000 read)
+
+
+get by 10 process 10000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            10.630
+Completed:              10000
+Failed:                 0 (0.00%)
+TPS:                    940769.2
+Latency (ms):           0.001
+IO tput (MB):           933.075 (9.918 written, 0.000 read)
+
+
+get by 100 process 100000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            45.566
+Completed:              100000
+Failed:                 0 (0.00%)
+TPS:                    2194641.9
+Latency (ms):           0.000
+IO tput (MB):           2176.693 (99.182 written, 0.000 read)
+
+
+get by 1000 process 1000000 times
+-------------------------------------------------------------------------------
+Wclock (ms):            216.048
+Completed:              1000000
+Failed:                 0 (0.00%)
+TPS:                    4628605.0
+Latency (ms):           0.000
+IO tput (MB):           4590.749 (991.821 written, 0.000 read)
 
    
-   pts is 6x times slow for write due to process spawn; and 2x times slow for
-read. 
+
+
+
+
+
 
 
 

@@ -16,26 +16,30 @@
 %%  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
--module(cache_app).
+-module(pts_cache_sup).
+-behaviour(supervisor).
 -author(dmkolesnikov@gmail.com).
 
--export([
-   start/2,
-   stop/1
-]).
+-export([start_link/0, init/1, spawn/2]).
 
+spawn(Ns, Uid) ->
+   supervisor:start_child(?MODULE, [Ns, Uid]).
 
-start(_Type, _Args) ->
-   case cache_sup:start_link() of
-      {ok, Pid} ->
-         % meta data for pts tables
-         ok = pts:new(cache, [
-            {factory, fun cache_entry_sup:create/1}
-         ]),
-         {ok, Pid};
-      Err ->
-         Err
-   end.
+start_link() ->
+   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
    
-stop(_S) ->
-   ok.
+init([]) ->
+   {ok,
+      {
+         {simple_one_for_one, 10, 60},
+         [cache()]
+      }
+   }.
+
+cache() ->
+   {
+      pts_cache,
+      {pts_cache, start_link, []},
+      temporary, brutal_kill, worker, dynamic
+   }.
+

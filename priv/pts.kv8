@@ -1,8 +1,10 @@
 [
-   {kvs, kv8_pts, []},
-   {keyspace, 100},
+   {suite, kv8_pts, []},
+   {dataset, 10000, md5, 1024},
    {workload, [
-      {put, 1000, 512},
-      {get, 1000}
+      {seq, 10,     1000}, 
+      {get, 10,     1000},
+      {get, 100,    1000},
+      {get, 1000,   1000}
    ]}
 ].
