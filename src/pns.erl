@@ -39,7 +39,7 @@ register(Ns, Uid) ->
 register(Ns, Uid, Pid) ->
    case ?MODULE:whereis(Ns, Uid) of
       undefined -> 
-         true = ets:insert_new(pns, {{Ns, Uid}, Pid}),
+         ets:insert(pns, {{Ns, Uid}, Pid}),
          ok;
       Old when Old =:= Pid ->
          ok;
@@ -86,7 +86,7 @@ map(Ns0, Fun) ->
    qlc:e(
       qlc:q([ 
          Fun({Uid, Pid}) 
-         || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_process_alive(Pid)
+         || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_uid_alive(Pid)
       ])
    ).
    
@@ -96,7 +96,7 @@ map(Ns0, Fun) ->
 fold(Ns0, Acc0, Fun) ->
    qlc:fold(Fun, Acc0, 
       qlc:q([ 
-         {Uid, Pid} || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_process_alive(Pid)
+         {Uid, Pid} || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_uid_alive(Pid)
       ])
    ).      
       

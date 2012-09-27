@@ -25,7 +25,7 @@ dialyzer: compile
 	@dialyzer -Wno_return -c apps/riak_kv/ebin
 
 run:
-	erl -pa ./deps/*/ebin -pa ./ebin
+	erl -pa ./deps/*/ebin -pa ./ebin +P 10000000
 
 rebar:
 	curl -O http://cloud.github.com/downloads/basho/rebar/rebar

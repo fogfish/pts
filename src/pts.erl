@@ -35,14 +35,14 @@
 -export([map/2, fold/3]).
 
 %%
-%% internal record, pts metadata
+%% internal record, pts meta-data
 -record(pts, {
-   ns        :: atom(),       % table id / namesppace
+   ns        :: atom(),       % table id / name-space
    kprefix   :: integer() | inf, % length of key 
    readonly  = false :: boolean(),    % write operations are disabled
    rthrough  = false :: boolean(),    % read-through
-   immutable = false :: boolean(),    % written value cannont be changed
-   factory   :: function()    % factory function  
+   immutable = false :: boolean(),    % written value cannot be changed
+   factory   :: function()            % factory function Fun(Ns, Uid)
 }).
 -define(TIMEOUT, 10000).
 
@@ -56,8 +56,7 @@
 %% new(Ns, Opts) -> ok
 %%    Name = term()
 %%    Opts = [Option]
-%%    Opt  = {keypos,  integer()} | async | readonly | 
-%%           {timeout, integer()} | {factory fun()}
+%%       {factory, Fun(Ns, Uid)}
 %%
 %% Creates a new namespace
 %%
