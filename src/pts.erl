@@ -37,8 +37,8 @@
 %%
 %% internal record, pts meta-data
 -record(pts, {
-   ns        :: atom(),       % table id / name-space
-   kprefix   :: integer() | inf, % length of key 
+   ns        :: atom(),               % table id / name-space
+   kprefix   :: integer() | inf,      % length of key 
    readonly  = false :: boolean(),    % write operations are disabled
    rthrough  = false :: boolean(),    % read-through
    immutable = false :: boolean(),    % written value cannot be changed
@@ -71,7 +71,11 @@ new(Ns, Opts) ->
 
 init([{kprefix, X} | T], P) ->
    init(T, P#pts{kprefix=X});
-init([{factory, X} | T], P) ->
+init([{factory, {Mod, Opts}} | T], P) ->
+   {ok, _} = pts_ns_sup:append(Mod, Opts),
+   init(T, P#pts{factory=Mod});
+init([{factory, X} | T], P)
+ when is_function(X) ->
    init(T, P#pts{factory=X});
 init([readonly | T], P) ->
    init(T, P#pts{readonly=true});
@@ -142,11 +146,11 @@ put(Ns, Key, Val) ->
          {error, readonly};
       [#pts{factory=undefined}] ->
          {error, readonly};
-      [#pts{factory=Fun, kprefix=Pfx, immutable=Imm}=S] ->
+      [#pts{factory=Fun, kprefix=Pfx, immutable=Imm}] ->
          Uid = key_to_uid(Key, Pfx),
          case pns:whereis(Ns, Uid) of
             undefined ->
-               {ok, Pid} = Fun(Ns, Uid),
+               {ok, Pid} = create(Fun, Ns, Uid),
                Ref = erlang:monitor(process, Pid),
                erlang:send(Pid, {put, {self(), Ref}, Key, Val}),
                wait_for_reply(Ref, ?TIMEOUT);
@@ -168,16 +172,16 @@ get(Ns, Key) ->
    case ets:lookup(pts, Ns) of
       [] ->
          {error, no_namespace};
-      [#pts{rthrough=true, factory=Fun, kprefix=Pfx}=S] ->
+      [#pts{rthrough=true, factory=Fun, kprefix=Pfx}] ->
          Uid = key_to_uid(Key, Pfx),
          {ok, Pid} = case pns:whereis(Ns, Uid) of
-            undefined -> Fun(Ns, Uid);
+            undefined -> create(Fun, Ns, Uid);
             Proc      -> {ok, Proc}
          end,
          Ref = erlang:monitor(process, Pid),
          erlang:send(Pid, {get, {self(), Ref}, Key}),
          wait_for_reply(Ref, ?TIMEOUT);
-      [#pts{kprefix=Pfx}=S] ->
+      [#pts{kprefix=Pfx}] ->
          Uid = key_to_uid(Key, Pfx),
          case pns:whereis(Ns, Uid) of
             undefined -> 
@@ -217,7 +221,7 @@ remove(Ns, Key) ->
 map(Ns, Fun) ->   
    case ets:lookup(pts, Ns) of
       []   -> {error, no_namespace};
-      [#pts{}=S] -> 
+      [#pts{}] -> 
          pns:map(Ns, 
             fun({Key, Pid}) ->
                Getter = fun() ->
@@ -236,7 +240,7 @@ map(Ns, Fun) ->
 fold(Ns, Acc, Fun) ->   
    case ets:lookup(pts, Ns) of
       []   -> {error, no_namespace};
-      [#pts{}=S] -> 
+      [#pts{}] -> 
          pns:fold(Ns, Acc, 
             fun({Key, Pid}, A) ->
                Getter = fun() ->
@@ -289,4 +293,12 @@ wait_for_reply(Ref, Timeout) ->
       {error, timeout}
    end.
 
+%%
+%%
+create(Fun, Ns, Uid)
+ when is_function(Fun) ->
+   Fun(Ns, Uid);
+create(Fun, Ns, Uid)
+ when is_atom(Fun) ->
+   pts_factory:create(Fun, Ns, Uid).
 

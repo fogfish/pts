@@ -55,20 +55,16 @@
 %    ok = pts:drop({test, a}),
 %    [] = pts:i().   
 
-%%-----------------------------------------------------------------------------
-%%
-%% data management
-%%
-%%-----------------------------------------------------------------------------
--define(NS1,  "pts:test").
--define(NS2,  {test, 1}).
-
-
--define(PTS, "kvs:test").
 -define(KEY, key).
 -define(VAL, {key, "value"}).
 -define(NEW, {key,   "new"}).
 
+%%-----------------------------------------------------------------------------
+%%
+%% data management: factory function
+%%
+%%-----------------------------------------------------------------------------
+-define(PTS, "kvs:test").
 pts_dat_mgmt_test_() ->
    {
       setup,
@@ -124,3 +120,39 @@ fold() ->
       0,
       lists:seq(1,5)
    ).   
+
+
+
+%%-----------------------------------------------------------------------------
+%%
+%% data management: default factory
+%%
+%%-----------------------------------------------------------------------------
+pts_factory_test_() ->
+   {
+      setup,
+      fun() -> 
+         application:start(pts),
+         pts:new(factory, [
+            {factory, {pts_cache ,[]}}
+         ])
+      end,
+      [         
+          {"Put", fun fput/0}
+         ,{"Get", fun fget/0}
+         ,{"Remove", fun fremove/0}
+      ]
+   }.   
+   
+
+fput() ->
+   ok = pts:put(factory, ?KEY, ?VAL),
+   ok = pts:put(factory, ?KEY, ?NEW).
+   
+fget() ->
+   {ok, ?NEW} = pts:get(factory, ?KEY).
+   
+fremove() ->
+   ok = pts:remove(factory, ?KEY).
+
+
