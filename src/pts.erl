@@ -38,7 +38,7 @@
 %% internal record, pts meta-data
 -record(pts, {
    ns        :: atom(),               % table id / name-space
-   kprefix   :: integer() | inf,      % length of key 
+   kprefix   = inf   :: integer() | inf, % length of key 
    readonly  = false :: boolean(),    % write operations are disabled
    rthrough  = false :: boolean(),    % read-through
    immutable = false :: boolean(),    % written value cannot be changed
