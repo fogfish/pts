@@ -140,59 +140,66 @@ i(Prop, Ns) ->
 %%
 put(Ns, Key, Val) ->
    case ets:lookup(pts, Ns) of
-      [] ->
-         {error, no_namespace};
-      [#pts{readonly=true}] ->
-         {error, readonly};
-      [#pts{factory=undefined}] ->
-         {error, readonly};
-      [#pts{factory=Fun, kprefix=Pfx, immutable=Imm}] ->
-         Uid = key_to_uid(Key, Pfx),
-         case pns:whereis(Ns, Uid) of
-            undefined ->
-               {ok, Pid} = create(Fun, Ns, Uid),
-               Ref = erlang:monitor(process, Pid),
-               erlang:send(Pid, {put, {self(), Ref}, Key, Val}),
-               wait_for_reply(Ref, ?TIMEOUT);
-            Pid ->
-               case Imm of
-                  true  ->
-                     {error, duplicate};
-                  false ->
-                     Ref = erlang:monitor(process, Pid),
-                     erlang:send(Pid, {put, {self(), Ref}, Key, Val}),
-                     wait_for_reply(Ref, ?TIMEOUT)
-               end
-         end
+      [] -> {error, no_namespace};
+      [#pts{readonly=true}]     -> {error, readonly};
+      [#pts{factory=undefined}] -> {error, readonly};
+      [#pts{}=P]                -> do_put(Key, Val, P)
    end.   
+
+do_put(Key, Val, #pts{ns=Ns, kprefix=Pfx}=P) ->
+   Uid = key_to_uid(Key, Pfx),
+   try 
+      do_put(pns:whereis(Ns, Uid), Uid, Key, Val, P)
+   catch
+      error:{badmatch, {error, Reason}} -> {error, Reason}
+   end.
+
+do_put(undefined, Uid, Key, Val, #pts{ns=Ns, factory=Fun}) ->
+   % create a new process
+   {ok, Pid} = create(Fun, Ns, Uid),
+   Tx = erlang:monitor(process, Pid),
+   erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
+   wait_for_reply(Tx, ?TIMEOUT);
+
+do_put(_Pid, _Uid, _Key, _Val, #pts{immutable=true}) ->
+   {error, duplicate};
+
+do_put(Pid, _Uid, Key, Val, #pts{}) ->
+   % update process
+   Tx = erlang:monitor(process, Pid),
+   erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
+   wait_for_reply(Tx, ?TIMEOUT).
+
 
 %%
 %% get(Ns, Key) - {ok, Val} | {error, Error}
 get(Ns, Key) ->
    case ets:lookup(pts, Ns) of
-      [] ->
-         {error, no_namespace};
-      [#pts{rthrough=true, factory=Fun, kprefix=Pfx}] ->
-         Uid = key_to_uid(Key, Pfx),
-         {ok, Pid} = case pns:whereis(Ns, Uid) of
-            undefined -> create(Fun, Ns, Uid);
-            Proc      -> {ok, Proc}
-         end,
-         Ref = erlang:monitor(process, Pid),
-         erlang:send(Pid, {get, {self(), Ref}, Key}),
-         wait_for_reply(Ref, ?TIMEOUT);
-      [#pts{kprefix=Pfx}] ->
-         Uid = key_to_uid(Key, Pfx),
-         case pns:whereis(Ns, Uid) of
-            undefined -> 
-               {error, not_found};
-            Pid       ->
-               Ref = erlang:monitor(process, Pid),
-               erlang:send(Pid, {get, {self(), Ref}, Key}),
-               wait_for_reply(Ref, ?TIMEOUT)
-         end
+      []         -> {error, no_namespace};
+      [#pts{}=P] -> do_get(Key, P)
    end.
-   
+
+do_get(Key, #pts{ns=Ns, kprefix=Pfx}=P) ->
+   Uid = key_to_uid(Key, Pfx),
+   try 
+      do_get(pns:whereis(Ns, Uid), Uid, Key, P)
+   catch
+      error:{badmatch, {error, Reason}} -> {error, Reason}
+   end.  
+
+do_get(undefined, Uid, Key, #pts{rthrough=true, ns=Ns, factory=Fun}) ->
+   {ok, Pid} = create(Fun, Ns, Uid),
+   Tx = erlang:monitor(process, Pid),
+   erlang:send(Pid, {get, {self(), Tx}, Key}),
+   wait_for_reply(Tx, ?TIMEOUT);
+
+do_get(undefined, _Uid, _Key, #pts{rthrough=false}) ->
+   {error, not_found};
+
+do_get(Pid, _Uid, Key, #pts{}) ->
+   Tx = erlang:monitor(process, Pid),
+   erlang:send(Pid, {get, {self(), Tx}, Key}),
+   wait_for_reply(Tx, ?TIMEOUT).
 
 %%
 %%

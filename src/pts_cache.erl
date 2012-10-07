@@ -39,6 +39,7 @@ start_link(Ns, Uid) ->
   gen_server:start_link(?MODULE, [Ns, Uid], []).
   
 init([Ns, Uid]) ->
+   process_flag(trap_exit, true),
    pns:register(Ns, Uid),
    %io:format("spawn: ~p@~p~n", [Uid, Ns]),
    {ok, #srv{ns=Ns, uid=Uid}}. 

@@ -25,5 +25,5 @@ init([Mod, Opts]) ->
 factory(Mod, Opts) ->
    {factory, 
       {Mod, start_link, Opts},
-      transient, brutal_kill, worker, dynamic
+      transient, 500, worker, dynamic
    }.

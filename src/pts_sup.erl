@@ -41,11 +41,11 @@ init([]) ->
 ns() ->
    {pts_ns_sup,
       {pts_ns_sup, start_link, []},
-      permanent, brutal_kill, supervisor, dynamic
+      permanent, 1000, supervisor, dynamic
    }.
 
 cache() ->
    {pts_cache_sup,
       {pts_cache_sup, start_link, []},
-      permanent, brutal_kill, supervisor, dynamic
+      permanent, 1000, supervisor, dynamic
    }.
