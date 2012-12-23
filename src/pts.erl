@@ -30,7 +30,7 @@
 %% Management
 -export([new/1, new/2, drop/1, i/0, i/1, i/2]).
 %% Hashtable
--export([put/3, get/2, remove/2]).
+-export([put/3, put/4, get/2, remove/2]).
 %% map/fold
 -export([map/2, fold/3]).
 
@@ -139,36 +139,60 @@ i(Prop, Ns) ->
 %% create(Ns, Key, Val) -> ok | {error, Reason}
 %%
 put(Ns, Key, Val) ->
+   put(Ns, Key, Val, []).
+
+put(Ns, Key, Val, Opts) ->
    case ets:lookup(pts, Ns) of
       [] -> {error, no_namespace};
       [#pts{readonly=true}]     -> {error, readonly};
       [#pts{factory=undefined}] -> {error, readonly};
-      [#pts{}=P]                -> do_put(Key, Val, P)
+      [#pts{}=P]                -> do_put(Key, Val, P, Opts)
    end.   
 
-do_put(Key, Val, #pts{ns=Ns, kprefix=Pfx}=P) ->
+do_put(Key, Val, #pts{ns=Ns, kprefix=Pfx}=P, Opts) ->
    Uid = key_to_uid(Key, Pfx),
-   try 
-      do_put(pns:whereis(Ns, Uid), Uid, Key, Val, P)
+   try
+      case proplists:is_defined(async, Opts) of
+         true  -> cast_put(pns:whereis(Ns, Uid), Uid, Key, Val, P, Opts);
+         false -> call_put(pns:whereis(Ns, Uid), Uid, Key, Val, P, Opts)
+      end
    catch
       error:{badmatch, {error, Reason}} -> {error, Reason}
    end.
 
-do_put(undefined, Uid, Key, Val, #pts{ns=Ns, factory=Fun}) ->
+%%
+%% synchronous put
+call_put(undefined, Uid, Key, Val, #pts{ns=Ns, factory=Fun}, Opts) ->
    % create a new process
    {ok, Pid} = create(Fun, Ns, Uid),
    Tx = erlang:monitor(process, Pid),
    erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
-   wait_for_reply(Tx, ?TIMEOUT);
+   wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT));
 
-do_put(_Pid, _Uid, _Key, _Val, #pts{immutable=true}) ->
+call_put(_Pid, _Uid, _Key, _Val, #pts{immutable=true}, _Opts) ->
+   % process exists and cannot be changed
    {error, duplicate};
 
-do_put(Pid, _Uid, Key, Val, #pts{}) ->
+call_put(Pid, _Uid, Key, Val, #pts{}, Opts) ->
    % update process
    Tx = erlang:monitor(process, Pid),
    erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
-   wait_for_reply(Tx, ?TIMEOUT).
+   wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT)).
+
+%%
+%% asynchronous put
+cast_put(undefined, Uid, Key, Val, #pts{ns=Ns, factory=Fun}, _Opts) ->
+   % create a new process
+   {ok, Pid} = create(Fun, Ns, Uid),
+   erlang:send(Pid, {put, Key, Val});
+
+cast_put(_Pid, _Uid, _Key, _Val, #pts{immutable=true}, _Opts) ->
+   % process exists and cannot be changed
+   {error, duplicate};
+
+cast_put(Pid, _Uid, Key, Val, #pts{}, _Opts) ->
+   % update process
+   erlang:send(Pid, {put, Key, Val}).
 
 
 %%
