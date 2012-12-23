@@ -103,7 +103,7 @@ map() ->
       fun(X) -> ok = pts:put(?PTS, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map(?PTS, fun({K,V}) ->  {ok, V0} = V(), K*V0 end), 
+   M = pts:map(?PTS, fun({K, V}) ->  K * V() end), 
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -114,7 +114,7 @@ fold() ->
       fun(X) -> ok = pts:put(?PTS, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(?PTS, 0, fun({K,V}, A) -> {ok, V0} = V(), A + K*V0 end),
+   M = pts:fold(?PTS, 0, fun({K, V}, A) -> A + K * V() end),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,

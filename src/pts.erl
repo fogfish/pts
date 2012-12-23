@@ -258,7 +258,8 @@ map(Ns, Fun) ->
                Getter = fun() ->
                   Ref = erlang:monitor(process, Pid),
                   erlang:send(Pid, {get, {self(), Ref}, Key}),
-                  wait_for_reply(Ref, ?TIMEOUT)
+                  {ok, Val} = wait_for_reply(Ref, ?TIMEOUT),
+                  Val
                end,
                Fun({Key, Getter})
             end
@@ -277,7 +278,8 @@ fold(Ns, Acc, Fun) ->
                Getter = fun() ->
                   Ref = erlang:monitor(process, Pid),
                   erlang:send(Pid, {get, {self(), Ref}, Key}),
-                  wait_for_reply(Ref, ?TIMEOUT)
+                  {ok, Val} = wait_for_reply(Ref, ?TIMEOUT),
+                  Val
                end,
                Fun({Key, Getter}, A)
             end
