@@ -17,7 +17,6 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 -module(pts_tests).
--behaviour(gen_server).
 -author(dmkolesnikov@gmail.com).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -70,9 +69,8 @@ pts_dat_mgmt_test_() ->
       setup,
       fun() -> 
          application:start(pts),
-         pts_cache_sup:start_link(),
          pts:new(?PTS, [
-            {factory, fun pts_cache_sup:spawn/2}
+            {supervisor, pts_cache_sup}
          ])
       end,
       [         
@@ -91,7 +89,7 @@ put() ->
    ok = pts:put(?PTS, ?KEY, ?NEW).
    
 get() ->
-   {ok, ?NEW} = pts:get(?PTS, ?KEY).
+   ?NEW = pts:get(?PTS, ?KEY).
    
 remove() ->
    ok = pts:remove(?PTS, ?KEY).
@@ -121,38 +119,5 @@ fold() ->
       lists:seq(1,5)
    ).   
 
-
-
-%%-----------------------------------------------------------------------------
-%%
-%% data management: default factory
-%%
-%%-----------------------------------------------------------------------------
-pts_factory_test_() ->
-   {
-      setup,
-      fun() -> 
-         application:start(pts),
-         pts:new(factory, [
-            {factory, {pts_cache ,[]}}
-         ])
-      end,
-      [         
-          {"Put", fun fput/0}
-         ,{"Get", fun fget/0}
-         ,{"Remove", fun fremove/0}
-      ]
-   }.   
-   
-
-fput() ->
-   ok = pts:put(factory, ?KEY, ?VAL),
-   ok = pts:put(factory, ?KEY, ?NEW).
-   
-fget() ->
-   {ok, ?NEW} = pts:get(factory, ?KEY).
-   
-fremove() ->
-   ok = pts:remove(factory, ?KEY).
 
 

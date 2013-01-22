@@ -23,7 +23,7 @@
 -author(dmkolesnikov@gmail.com).
 -include_lib("stdlib/include/qlc.hrl").
 
--export([register/2, register/3, unregister/2, whereis/2, whatis/2, map/2, fold/3]).
+-export([register/2, register/3, unregister/2, whereis/2, whatis/2, lock/2, unlock/2, map/2, fold/3]).
 
 %%
 %% register(Ns, Uid, Pid) -> ok
@@ -38,13 +38,16 @@ register(Ns, Uid) ->
    ?MODULE:register(Ns, Uid, self()).
 register(Ns, Uid, Pid) ->
    case ?MODULE:whereis(Ns, Uid) of
-      undefined -> 
+      undefined   -> 
+         ets:insert(pns, {{Ns, Uid}, Pid}),
+         ok;
+      {locked, _} ->
          ets:insert(pns, {{Ns, Uid}, Pid}),
          ok;
       Old when Old =:= Pid ->
          ok;
-      _ ->
-         throw(badarg)
+      Old ->
+         throw({registered, Old})
    end. 
 
 %%
@@ -62,6 +65,8 @@ unregister(Ns, Uid) ->
 %% Returns undefined if the name is not registered.   
 whereis(Ns, Uid) ->
    case ets:lookup(pns, {Ns, Uid}) of
+      [{_, {locked, _}}] ->
+         undefined;      
       [{_, Pid}] ->
          case is_uid_alive(Pid) of
             true  -> Pid;
@@ -79,6 +84,55 @@ whereis(Ns, Uid) ->
 whatis(Ns, Pid) ->
    ets:select(pns, [{{{Ns, '$1'}, Pid}, [], ['$1']}]).
    
+%%
+%% lock(Ns, Uid) -> true | {locked, Pid} | {active, Pid}
+%%
+%% lock a key 
+lock(Ns, Uid) ->
+   case ets:lookup(pns, {Ns, Uid}) of
+      % uid is not lock, try to get one
+      [] -> new_lock(Ns, Uid);
+      % check that lock owner process is alive
+      [{_, {locked, Pid}}] -> try_lock(Ns, Uid, {locked, Pid});
+      % check that key owner process is alive
+      [{_, Pid}]           -> try_lock(Ns, Uid, {active, Pid})
+   end.
+
+new_lock(Ns, Uid) ->
+   % second phase, attempts to accrue a new lock
+   case ets:insert_new(pns, {{Ns, Uid}, {locked, self()}}) of
+      true  -> 
+         true;
+      false -> 
+         case ets:lookup(pns, {Ns, Uid}) of
+            [{_, {locked, Pid}}] -> try_lock(Ns, Uid, {locked, Pid});
+            [{_, Pid}]           -> try_lock(Ns, Uid, {active, Pid})
+         end
+   end.   
+
+try_lock(Ns, Uid, {_, Owner}=Lock) ->
+   % validates if existed lock valid
+   case is_uid_alive(Owner) of
+      true  -> Lock;
+      false -> new_lock(Ns, Uid)
+   end.
+
+%%
+%% unlock(Ns, Uid) -> true | false
+unlock(Ns, Uid) ->
+   case ets:lookup(pns, {Ns, Uid}) of
+      % check that lock owner process is alive
+      [{_, {locked, Pid}}] when Pid =:= self() -> 
+         ets:delete(pns, {Ns, Uid});
+      % check that key owner process is alive
+      [{_, Pid}]           -> 
+         case is_uid_alive(Pid) of
+            true  -> false; % key is locked or used by process
+            false -> true 
+         end
+   end.
+
+
 %%
 %% map(Ns, Fun) -> [...]
 %%   Fun = fun({Uid, Pid}) -> ...
@@ -111,6 +165,8 @@ fold(Ns0, Acc0, Fun) ->
 %% check 
 is_uid_alive(Uid) when is_pid(Uid) ->
    is_process_alive(Uid);
+is_uid_alive({locked, Pid}) ->
+   is_process_alive(Pid);
 is_uid_alive(_) ->
    true.
 

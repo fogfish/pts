@@ -28,21 +28,21 @@
 
 
 %% Management
--export([new/1, new/2, drop/1, i/0, i/1, i/2]).
+-export([new/1, new/2, drop/1, i/1, i/2]).
 %% Hashtable
--export([put/3, put/4, get/2, remove/2]).
+-export([put/3, put/4, get/2, get/3, remove/2, remove/3]).
 %% map/fold
--export([map/2, fold/3]).
+-export([map/2, map/3, fold/3, fold/4]).
 
 %%
 %% internal record, pts meta-data
 -record(pts, {
-   ns        :: atom(),               % table id / name-space
-   kprefix   = inf   :: integer() | inf, % length of key 
-   readonly  = false :: boolean(),    % write operations are disabled
-   rthrough  = false :: boolean(),    % read-through
-   immutable = false :: boolean(),    % written value cannot be changed
-   factory   :: function()            % factory function Fun(Ns, Uid)
+   ns        :: atom(),                % unique name-space id
+   keylen    = inf   :: integer() | inf, % length of key (significant park of key used to distinguish a process)
+   readonly  = false :: boolean(),     % write operations are disabled
+   rthrough  = false :: boolean(),     % read-through
+   immutable = false :: boolean(),     % write-once (written value cannot be changed)
+   supervisor        :: atom() | pid() % element supervisor (simple_one_for_one)
 }).
 -define(TIMEOUT, 10000).
 
@@ -69,14 +69,25 @@ new(Ns, Opts) ->
       _  -> throw(badarg)
    end.
 
-init([{kprefix, X} | T], P) ->
-   init(T, P#pts{kprefix=X});
-init([{factory, {Mod, Opts}} | T], P) ->
-   {ok, _} = pts_ns_sup:append(Mod, Opts),
-   init(T, P#pts{factory=Mod});
-init([{factory, X} | T], P)
- when is_function(X) ->
-   init(T, P#pts{factory=X});
+init([{keylen, X} | T], P) ->
+   init(T, P#pts{keylen=X});   
+init([{factory, _} | _], _) ->
+    % the factory function is deprecated
+   throw(badarg);
+init([{supervisor, Mod} | T], #pts{ns=Ns}=P) ->
+   {ok, Pid} = supervisor:start_child(pts_sup, {
+      Ns,
+      {Mod, start_link, []},
+      permanent, 1000, supervisor, dynamic
+   }),
+   init(T, P#pts{supervisor=Pid});
+init([{supervisor, Mod, Opts} | T], #pts{ns=Ns}=P) ->
+   {ok, Pid} = supervisor:start_child(pts_sup, {
+      Ns,
+      {Mod, start_link, Opts},
+      permanent, 1000, supervisor, dynamic
+   }),
+   init(T, P#pts{supervisor=Pid});
 init([readonly | T], P) ->
    init(T, P#pts{readonly=true});
 init([immutable | T], P) ->
@@ -91,41 +102,32 @@ init([], P) ->
 %%
 drop(Ns) ->
    case ets:lookup(pts, Ns) of
-      [_] -> ets:delete(pts, Ns), ok;
+      [_] -> 
+         ets:delete(pts, Ns), 
+         supervisor:terminate_child(pts_sup, Ns),
+         supervisor:delete_child(pts_sup, Ns),
+         ok;
       _   -> ok
    end.   
    
-%%
-%% i() -> [Meta]
-%%
-%% return metadata of defined tables
-i() ->
-   ets:tab2list(pts).
-  
 %%
 %% i(Tab) -> {ok, Meta} | {error, Reason}
 %%
 %% return meta data for given table
 i(Ns) ->
    case ets:lookup(pts, Ns) of
-      [T] -> {ok, T};
-      _   -> {error, no_table}
+      [T] -> lists:zip(record_info(fields, pts), tl(tuple_to_list(T)));
+      _   -> throw(badarg)
    end.
 
 %%
 %% i(Property, Tab) -> {ok, Meta} | {error, Reason}
 %%
 %% return meta data for given table
-i(ns, #pts{ns = Val}) ->
-   Val;
-i(factory, #pts{factory = Val}) ->
-   Val;
-i(_, #pts{}) ->
-   throw(badarg);
 i(Prop, Ns) ->
-   case ets:lookup(pts, Ns) of
-      [T] -> i(Prop, T);
-      _   -> {error, no_table}
+   case lists:keyfind(Prop, 1, i(Ns)) of
+      false    -> throw(badarg);
+      {_, Val} -> Val
    end.
 
 
@@ -136,156 +138,197 @@ i(Prop, Ns) ->
 %%-----------------------------------------------------------------------------
 
 %%
-%% create(Ns, Key, Val) -> ok | {error, Reason}
+%% put(Ns, Key, Val) -> ok | {error, Reason}
 %%
 put(Ns, Key, Val) ->
    put(Ns, Key, Val, []).
 
 put(Ns, Key, Val, Opts) ->
    case ets:lookup(pts, Ns) of
-      [] -> {error, no_namespace};
-      [#pts{readonly=true}]     -> {error, readonly};
-      [#pts{factory=undefined}] -> {error, readonly};
-      [#pts{}=P]                -> do_put(Key, Val, P, Opts)
+      [] -> 
+         throw({nonamespace, Ns});
+      [#pts{readonly=true}] -> 
+         throw({readonly, Ns});
+      [#pts{supervisor=undefined}] -> 
+         throw({readonly, Ns});
+      [#pts{keylen=KLen}=P] -> 
+         do_put(key_to_uid(Key, KLen), Key, Val, P, Opts)
    end.   
 
-do_put(Key, Val, #pts{ns=Ns, kprefix=Pfx}=P, Opts) ->
-   Uid = key_to_uid(Key, Pfx),
-   try
-      case proplists:is_defined(async, Opts) of
-         true  -> cast_put(pns:whereis(Ns, Uid), Uid, Key, Val, P, Opts);
-         false -> call_put(pns:whereis(Ns, Uid), Uid, Key, Val, P, Opts)
-      end
-   catch
-      error:{badmatch, {error, Reason}} -> {error, Reason}
+do_put(Uid, Key, Val, #pts{ns=Ns}=P, Opts) ->
+   case pns:lock(Ns, Uid) of
+      true   ->
+         create(Uid, Key, Val, P, Opts);
+      {locked, _} ->
+         timer:sleep(100), 
+         update(Uid, Key, Val, P, Opts);
+      {active, Pid}    -> 
+         update(Uid, Key, Val, P, Opts)
    end.
 
-%%
-%% synchronous put
-call_put(undefined, Uid, Key, Val, #pts{ns=Ns, factory=Fun}, Opts) ->
-   % create a new process
-   {ok, Pid} = create(Fun, Ns, Uid),
-   Tx = erlang:monitor(process, Pid),
-   erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
-   wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT));
+create(Uid, Key, Val, #pts{ns=Ns, supervisor=Sup}, Opts) ->
+   Pid = create_process(Sup, Ns, Uid),
+   case proplists:is_defined(async, Opts) of
+      true  ->
+         erlang:send(Pid, {put, Key, Val}),
+         ok;
+      false ->
+         Tx = erlang:monitor(process, Pid),
+         erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
+         wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT))
+   end.
 
-call_put(_Pid, _Uid, _Key, _Val, #pts{immutable=true}, _Opts) ->
+update(_Uid, Key, _Val, #pts{immutable=true}, _Opts) ->
    % process exists and cannot be changed
-   {error, duplicate};
+   throw({already_exists, Key});
 
-call_put(Pid, _Uid, Key, Val, #pts{}, Opts) ->
-   % update process
-   Tx = erlang:monitor(process, Pid),
-   erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
-   wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT)).
-
-%%
-%% asynchronous put
-cast_put(undefined, Uid, Key, Val, #pts{ns=Ns, factory=Fun}, _Opts) ->
-   % create a new process
-   {ok, Pid} = create(Fun, Ns, Uid),
-   erlang:send(Pid, {put, Key, Val});
-
-cast_put(_Pid, _Uid, _Key, _Val, #pts{immutable=true}, _Opts) ->
-   % process exists and cannot be changed
-   {error, duplicate};
-
-cast_put(Pid, _Uid, Key, Val, #pts{}, _Opts) ->
-   % update process
-   erlang:send(Pid, {put, Key, Val}).
-
+update(Uid, Key, Val, #pts{ns=Ns, supervisor=Sup}=P, Opts) ->
+   case pns:whereis(Ns, Uid) of
+      undefined -> 
+         do_put(Uid, Key, Val, P, Opts);
+      Pid       ->
+         case proplists:is_defined(async, Opts) of
+            true  ->
+               erlang:send(Pid, {put, Key, Val}),
+               ok;
+            false ->
+               Tx = erlang:monitor(process, Pid),
+               erlang:send(Pid, {put, {self(), Tx}, Key, Val}),
+               wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT))
+         end
+   end.
 
 %%
 %% get(Ns, Key) - {ok, Val} | {error, Error}
 get(Ns, Key) ->
+   get(Ns, Key, []).
+
+get(Ns, Key, Opts) ->
    case ets:lookup(pts, Ns) of
-      []         -> {error, no_namespace};
-      [#pts{}=P] -> do_get(Key, P)
+      []         -> throw({nonamespace, Ns});
+      [#pts{keylen=KLen}=P] -> do_get(key_to_uid(Key, KLen), Key, P, Opts)
    end.
 
-do_get(Key, #pts{ns=Ns, kprefix=Pfx}=P) ->
-   Uid = key_to_uid(Key, Pfx),
-   try 
-      do_get(pns:whereis(Ns, Uid), Uid, Key, P)
-   catch
-      error:{badmatch, {error, Reason}} -> {error, Reason}
-   end.  
+do_get(Uid, Key, #pts{ns=Ns}=P, Opts) ->
+   case pns:whereis(Ns, Uid) of
+      undefined ->
+         get_through(Uid, Key, P, Opts);
+      Pid       ->
+         Tx = erlang:monitor(process, Pid),
+         erlang:send(Pid, {get, {self(), Tx}, Key}),
+         wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT))
+   end.
 
-do_get(undefined, Uid, Key, #pts{rthrough=true, ns=Ns, factory=Fun}) ->
-   {ok, Pid} = create(Fun, Ns, Uid),
-   Tx = erlang:monitor(process, Pid),
-   erlang:send(Pid, {get, {self(), Tx}, Key}),
-   wait_for_reply(Tx, ?TIMEOUT);
+get_through(_Uid, Key, #pts{rthrough=false}, _Opts) ->
+   throw({not_found, Key});
 
-do_get(undefined, _Uid, _Key, #pts{rthrough=false}) ->
-   {error, not_found};
-
-do_get(Pid, _Uid, Key, #pts{}) ->
-   Tx = erlang:monitor(process, Pid),
-   erlang:send(Pid, {get, {self(), Tx}, Key}),
-   wait_for_reply(Tx, ?TIMEOUT).
+get_through(Uid, Key, #pts{ns=Ns, supervisor=Sup}=P, Opts) ->
+   case pns:lock(Ns, Uid) of
+      true   ->
+         Pid = create_process(Sup, Ns, Uid),
+         Tx = erlang:monitor(process, Pid),
+         erlang:send(Pid, {get, {self(), Tx}, Key}),
+         wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT));
+      {locked, _} ->
+         timer:sleep(100), 
+         do_get(Uid, Key, P, Opts);
+      {active, Pid}    -> 
+         Tx = erlang:monitor(process, Pid),
+         erlang:send(Pid, {get, {self(), Tx}, Key}),
+         wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT))
+   end.
 
 %%
 %%
 remove(Ns, Key) ->
+   remove(Ns, Key, []).
+
+remove(Ns, Key, Opts) ->
    case ets:lookup(pts, Ns) of
-      [] ->
-         {error, no_namespace};
-      [#pts{readonly=true}] ->
-         {error, readonly};
-      [#pts{factory=undefined}] ->
-         {error, readonly};
-      [#pts{kprefix=Pfx}] ->
-         case pns:whereis(Ns, key_to_uid(Key, Pfx)) of
-            undefined -> 
-               ok;
-            Pid       -> 
-               Ref = erlang:monitor(process, Pid),
-               erlang:send(Pid, {remove, {self(), Ref}, Key}),
-               wait_for_reply(Ref, ?TIMEOUT)
-         end
+      [] -> throw({nonamespace, Ns});
+      [#pts{readonly=true}]     -> throw({readonly, Ns});
+      [#pts{supervisor=undefined}] -> throw({readonly, Ns});
+      [#pts{keylen=KLen}=P] -> do_remove(key_to_uid(Key, KLen), Key, P, Opts)
    end.
       
+do_remove(Uid, Key, #pts{ns=Ns}=P, Opts) ->
+   case proplists:is_defined(async, Opts) of
+      true  -> cast_remove(pns:whereis(Ns, Uid), Key, P, Opts);
+      false -> call_remove(pns:whereis(Ns, Uid), Key, P, Opts)
+   end.
+
+call_remove(undefined, _Key, _P, _Opts) ->
+   ok;
+
+call_remove(Pid, Key, #pts{}, Opts) ->
+   Tx = erlang:monitor(process, Pid),
+   erlang:send(Pid, {remove, {self(), Tx}, Key}),
+   wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT)).
+
+cast_remove(undefined, _Key, _P, _Opts) ->
+   ok;
+
+cast_remove(Pid, Key, #pts{}, _Opts) ->
+   erlang:send(Pid, {remove, Key}).
+
 %%
 %% map(Tab, Fun) -> List
 %%
-map(Ns, Fun) ->   
+map(Ns, Fun) ->
+   map(Ns, Fun, []).
+
+map(Ns, Fun, Opts) ->   
    case ets:lookup(pts, Ns) of
-      []   -> {error, no_namespace};
-      [#pts{}] -> 
-         pns:map(Ns, 
-            fun({Key, Pid}) ->
-               Getter = fun() ->
-                  Ref = erlang:monitor(process, Pid),
-                  erlang:send(Pid, {get, {self(), Ref}, Key}),
-                  {ok, Val} = wait_for_reply(Ref, ?TIMEOUT),
-                  Val
-               end,
-               Fun({Key, Getter})
-            end
-         )
+      []   -> throw({nonamespace, Ns});
+      [#pts{}=P] -> do_map(P, Fun, Opts)
    end.  
+
+do_map(#pts{ns=Ns}, Fun, Opts) ->
+   Tout = proplists:get_value(timeout, Opts, ?TIMEOUT),
+   pns:map(Ns, 
+      fun({Key, Pid}) ->
+         Getter = fun() ->
+            try
+               Ref = erlang:monitor(process, Pid),
+               erlang:send(Pid, {get, {self(), Ref}, Key}),
+               wait_for_reply(Ref, Tout)
+            catch _:_ ->
+               undefined
+            end
+         end,
+         Fun({Key, Getter})
+      end
+   ).
 
 %%
 %% foldl(Tab, Acc0, Fun) -> Acc
 %%
-fold(Ns, Acc, Fun) ->   
+fold(Ns, Acc, Fun) ->
+   fold(Ns, Acc, Fun, []).
+
+fold(Ns, Acc, Fun, Opts) ->   
    case ets:lookup(pts, Ns) of
-      []   -> {error, no_namespace};
-      [#pts{}] -> 
-         pns:fold(Ns, Acc, 
-            fun({Key, Pid}, A) ->
-               Getter = fun() ->
-                  Ref = erlang:monitor(process, Pid),
-                  erlang:send(Pid, {get, {self(), Ref}, Key}),
-                  {ok, Val} = wait_for_reply(Ref, ?TIMEOUT),
-                  Val
-               end,
-               Fun({Key, Getter}, A)
-            end
-         )
+      []   -> throw({nonamespace, Ns});
+      [#pts{}=P] -> do_fold(P, Acc, Fun, Opts)
    end.   
-      
+
+do_fold(#pts{ns=Ns}, Acc, Fun, Opts) ->
+   Tout = proplists:get_value(timeout, Opts, ?TIMEOUT),
+   pns:fold(Ns, Acc, 
+      fun({Key, Pid}, A) ->
+         Getter = fun() ->
+            try
+               Ref = erlang:monitor(process, Pid),
+               erlang:send(Pid, {get, {self(), Ref}, Key}),
+               wait_for_reply(Ref, Tout)
+            catch _:_ ->
+               undefined
+            end
+         end,
+         Fun({Key, Getter}, A)
+      end
+   ).   
+
 %%-----------------------------------------------------------------------------
 %%
 %% private
@@ -310,28 +353,33 @@ key_to_uid(Key, _) ->
 
 %%
 %%
+create_process(Sup, Ns, Uid) ->
+   case supervisor:start_child(Sup, [Ns, Uid]) of
+      {ok, Pid}       -> 
+         Pid;
+      {error, Reason} ->
+         pns:unlock(Ns, Uid),
+         throw(no_proc)
+   end.        
+
+%%
+%%
 wait_for_reply(Ref, Timeout) ->
    receive
+      {Ref, {ok, Reply}} ->
+         erlang:demonitor(Ref, [flush]),
+         Reply;
       {Ref, Reply} ->
          erlang:demonitor(Ref, [flush]),
          Reply;
       {'DOWN', Ref, _, _, Reason} ->
-         {error, Reason}
+         throw(Reason)
    after Timeout ->
       erlang:demonitor(Ref),
       receive
          {'DOWN', Ref, _, _, _} -> true
       after 0 -> true
       end,
-      {error, timeout}
+      throw(timeout)
    end.
-
-%%
-%%
-create(Fun, Ns, Uid)
- when is_function(Fun) ->
-   Fun(Ns, Uid);
-create(Fun, Ns, Uid)
- when is_atom(Fun) ->
-   pts_factory:create(Fun, Ns, Uid).
 

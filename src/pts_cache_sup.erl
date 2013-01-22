@@ -20,26 +20,31 @@
 -behaviour(supervisor).
 -author(dmkolesnikov@gmail.com).
 
--export([start_link/0, init/1, spawn/2]).
+-export([start_link/0, start_link/1, init/1]).
+-define(TTL,    60000).
 
-spawn(Ns, Uid) ->
-   supervisor:start_child(?MODULE, [Ns, Uid]).
-
+%%
+%%
 start_link() ->
-   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-   
-init([]) ->
+   supervisor:start_link(?MODULE, [?TTL]).
+
+start_link(TTL) ->
+   supervisor:start_link(?MODULE, [TTL]).
+
+%%
+%% 
+init([TTL]) ->
    {ok,
       {
          {simple_one_for_one, 10, 60},
-         [cache()]
+         [cache(TTL)]
       }
    }.
 
-cache() ->
+cache(TTL) ->
    {
       pts_cache,
-      {pts_cache, start_link, []},
+      {pts_cache, start_link, [TTL]},
       temporary, brutal_kill, worker, dynamic
    }.
 
