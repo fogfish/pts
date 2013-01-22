@@ -357,6 +357,9 @@ create_process(Sup, Ns, Uid) ->
    case supervisor:start_child(Sup, [Ns, Uid]) of
       {ok, Pid}       -> 
          Pid;
+      {error, {Reason, Stack}} when is_list(Stack) ->
+         pns:unlock(Ns, Uid),
+         throw(Reason);
       {error, Reason} ->
          pns:unlock(Ns, Uid),
          throw(Reason)
