@@ -359,7 +359,7 @@ create_process(Sup, Ns, Uid) ->
          Pid;
       {error, Reason} ->
          pns:unlock(Ns, Uid),
-         throw(no_proc)
+         throw(Reason)
    end.        
 
 %%
