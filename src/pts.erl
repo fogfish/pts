@@ -76,6 +76,8 @@ new(Ns, Opts) ->
             true  -> 
                throw(badarg);
             false ->
+               supervisor:terminate_child(pts_sup, Ns),
+               supervisor:delete_child(pts_sup, Ns),
                ets:insert(pts, 
                   init(Opts, #pts{ns=Ns, owner=self()})
                ),
