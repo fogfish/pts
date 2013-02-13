@@ -38,15 +38,15 @@ start_link(TTL, Ns, Uid) ->
   gen_server:start_link(?MODULE, [TTL, Ns, Uid], []).
   
 init([TTL, Ns, Uid]) ->
-   try
+   %try
    %process_flag(trap_exit, true),
    pns:register(Ns, Uid),
    %io:format("spawn ~p: ~p@~p~n", [self(), Uid, Ns]),
-   {ok, #srv{ns=Ns, uid=Uid, ttl=TTL}}
-    catch K:R ->
-       io:format("---->~p ~p ~p~n", [K,R, Uid]),
-       {stop, normal}
-    end.
+   {ok, #srv{ns=Ns, uid=Uid, ttl=TTL}}.
+    %catch K:R ->
+    %   io:format("---->~p ~p ~p~n", [K,R, Uid]),
+    %   {stop, normal}
+    %end.
   
 terminate(_Reason, #srv{ns=Ns, uid=Uid}) ->
    pns:unregister(Ns, Uid),

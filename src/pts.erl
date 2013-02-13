@@ -37,12 +37,13 @@
 %%
 %% internal record, pts meta-data
 -record(pts, {
-   ns        :: atom(),                % unique name-space id
+   ns        :: atom(),                 % unique name-space id
    keylen    = inf   :: integer() | inf, % length of key (significant park of key used to distinguish a process)
-   readonly  = false :: boolean(),     % write operations are disabled
-   rthrough  = false :: boolean(),     % read-through
-   immutable = false :: boolean(),     % write-once (written value cannot be changed)
-   supervisor        :: atom() | pid() % element supervisor (simple_one_for_one)
+   readonly  = false :: boolean(),      % write operations are disabled
+   rthrough  = false :: boolean(),      % read-through
+   immutable = false :: boolean(),      % write-once (written value cannot be changed)
+   supervisor        :: atom() | pid(), % element supervisor (simple_one_for_one)
+   owner                                % owner process pid
 }).
 -define(TIMEOUT, 10000).
 
@@ -65,8 +66,21 @@ new(Ns) ->
    
 new(Ns, Opts) ->
    case ets:lookup(pts, Ns) of
-      [] -> ets:insert(pts, init(Opts, #pts{ns=Ns})), ok;
-      _  -> throw(badarg)
+      [] -> 
+         ets:insert(pts, 
+            init(Opts, #pts{ns=Ns, owner=self()})
+         ),
+         ok;
+      [#pts{owner=Owner}] -> 
+         case is_process_alive(Owner) of
+            true  -> 
+               throw(badarg);
+            false ->
+               ets:insert(pts, 
+                  init(Opts, #pts{ns=Ns, owner=self()})
+               ),
+               ok
+         end
    end.
 
 init([{keylen, X} | T], P) ->
@@ -162,7 +176,7 @@ do_put(Uid, Key, Val, #pts{ns=Ns}=P, Opts) ->
       {locked, _} ->
          timer:sleep(100), 
          update(Uid, Key, Val, P, Opts);
-      {active, Pid}    -> 
+      {active, _Pid}    -> 
          update(Uid, Key, Val, P, Opts)
    end.
 
@@ -182,7 +196,7 @@ update(_Uid, Key, _Val, #pts{immutable=true}, _Opts) ->
    % process exists and cannot be changed
    throw({already_exists, Key});
 
-update(Uid, Key, Val, #pts{ns=Ns, supervisor=Sup}=P, Opts) ->
+update(Uid, Key, Val, #pts{ns=Ns}=P, Opts) ->
    case pns:whereis(Ns, Uid) of
       undefined -> 
          do_put(Uid, Key, Val, P, Opts);
