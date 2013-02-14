@@ -90,7 +90,7 @@ whatis(Ns, Pid) ->
 %% lock a key 
 lock(Ns, Uid) ->
    case ets:lookup(pns, {Ns, Uid}) of
-      % uid is not lock, try to get one
+      % uid is not locked, try to get one
       [] -> new_lock(Ns, Uid);
       % check that lock owner process is alive
       [{_, {locked, Pid}}] -> try_lock(Ns, Uid, {locked, Pid});

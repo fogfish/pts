@@ -16,17 +16,13 @@
 %%  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
+%%  @description
+%%     In-Process Term Storage: the library provides hashtable-like interface 
+%%     to manipulate data distributed through Erlang processes.
 -module(pts).
 -author(dmkolesnikov@gmail.com).
 
-%%
-%% In-Process Term Storage
-%%
-%% The library provides hashtable-like interface to manipulate data 
-%% distributed through Erlang processes.
-%%
-
-
+-include("pts.hrl").
 %% Management
 -export([new/1, new/2, drop/1, i/1, i/2]).
 %% Hashtable
@@ -34,18 +30,7 @@
 %% map/fold
 -export([map/2, map/3, fold/3, fold/4]).
 
-%%
-%% internal record, pts meta-data
--record(pts, {
-   ns        :: atom(),                 % unique name-space id
-   keylen    = inf   :: integer() | inf, % length of key (significant park of key used to distinguish a process)
-   readonly  = false :: boolean(),      % write operations are disabled
-   rthrough  = false :: boolean(),      % read-through
-   immutable = false :: boolean(),      % write-once (written value cannot be changed)
-   supervisor        :: atom() | pid(), % element supervisor (simple_one_for_one)
-   owner                                % owner process pid
-}).
--define(TIMEOUT, 10000).
+
 
 %%-----------------------------------------------------------------------------
 %%
@@ -65,51 +50,33 @@ new(Ns) ->
    new(Ns, []).
    
 new(Ns, Opts) ->
-   case ets:lookup(pts, Ns) of
-      [] -> 
-         ets:insert(pts, 
-            init(Opts, #pts{ns=Ns, owner=self()})
-         ),
-         ok;
-      [#pts{owner=Owner}] -> 
-         case is_process_alive(Owner) of
-            true  -> 
-               throw(badarg);
-            false ->
-               supervisor:terminate_child(pts_sup, Ns),
-               supervisor:delete_child(pts_sup, Ns),
-               ets:insert(pts, 
-                  init(Opts, #pts{ns=Ns, owner=self()})
-               ),
-               ok
-         end
-   end.
+   supervisor:start_child(pts_sup, {
+      Ns,
+      {pts_ns, start_link, [init(Opts, #pts{ns=Ns, owner=self()})]},
+      transient, 5000, worker, dynamic
+   }).
 
 init([{keylen, X} | T], P) ->
-   init(T, P#pts{keylen=X});   
-init([{factory, _} | _], _) ->
-    % the factory function is deprecated
-   throw(badarg);
-init([{supervisor, Mod} | T], #pts{ns=Ns}=P) ->
-   {ok, Pid} = supervisor:start_child(pts_sup, {
-      Ns,
-      {Mod, start_link, []},
-      permanent, 1000, supervisor, dynamic
-   }),
-   init(T, P#pts{supervisor=Pid});
+   init(T, P#pts{keylen=X}); 
+
+init([{supervisor, Mod} | T], P) ->
+   init(T, P#pts{supervisor=Mod});
+
 init([{supervisor, Mod, Opts} | T], #pts{ns=Ns}=P) ->
-   {ok, Pid} = supervisor:start_child(pts_sup, {
-      Ns,
-      {Mod, start_link, Opts},
-      permanent, 1000, supervisor, dynamic
-   }),
-   init(T, P#pts{supervisor=Pid});
+   init(T, P#pts{supervisor={Mod, Opts}});
+
 init([readonly | T], P) ->
    init(T, P#pts{readonly=true});
+
 init([immutable | T], P) ->
    init(T, P#pts{immutable=true});
+
 init(['read-through' | T], P) ->
    init(T, P#pts{rthrough=true});
+
+init([{attempt, X} | T], P) ->
+   init(T, P#pts{attempt=X});
+
 init([], P) ->
    P.
 
@@ -117,14 +84,11 @@ init([], P) ->
 %% delete(Ns) -> ok
 %%
 drop(Ns) ->
-   case ets:lookup(pts, Ns) of
-      [_] -> 
-         ets:delete(pts, Ns), 
-         supervisor:terminate_child(pts_sup, Ns),
-         supervisor:delete_child(pts_sup, Ns),
-         ok;
-      _   -> ok
-   end.   
+   Pid = erlang:element(2,
+      lists:keyfind(Ns, 1, supervisor:which_children(pts_sup))
+   ),
+   erlang:send(Pid, drop).
+
    
 %%
 %% i(Tab) -> {ok, Meta} | {error, Reason}
@@ -171,15 +135,18 @@ put(Ns, Key, Val, Opts) ->
          do_put(key_to_uid(Key, KLen), Key, Val, P, Opts)
    end.   
 
-do_put(Uid, Key, Val, #pts{ns=Ns}=P, Opts) ->
+do_put(_Uid, Key, _Val, #pts{ns=Ns, attempt=0}, _Opts) ->
+   throw({nolock, {Ns, Key}});
+
+do_put(Uid, Key, Val, #pts{ns=Ns, attempt=A}=P, Opts) ->
    case pns:lock(Ns, Uid) of
       true   ->
          create(Uid, Key, Val, P, Opts);
       {locked, _} ->
          timer:sleep(100), 
-         update(Uid, Key, Val, P, Opts);
+         update(Uid, Key, Val, P#pts{attempt=A - 1}, Opts);
       {active, _Pid}    -> 
-         update(Uid, Key, Val, P, Opts)
+         update(Uid, Key, Val, P#pts{attempt=A - 1}, Opts)
    end.
 
 create(Uid, Key, Val, #pts{ns=Ns, supervisor=Sup}, Opts) ->
@@ -238,16 +205,21 @@ do_get(Uid, Key, #pts{ns=Ns}=P, Opts) ->
 get_through(_Uid, Key, #pts{rthrough=false}, _Opts) ->
    throw({not_found, Key});
 
-get_through(Uid, Key, #pts{ns=Ns, supervisor=Sup}=P, Opts) ->
+get_through(_Uid, Key, #pts{ns=Ns, attempt=0}, _Opts) ->
+   throw({nolock, {Ns, Key}});
+
+get_through(Uid, Key, #pts{ns=Ns, supervisor=Sup, attempt=A}=P, Opts) ->
    case pns:lock(Ns, Uid) of
       true   ->
          Pid = create_process(Sup, Ns, Uid),
          Tx = erlang:monitor(process, Pid),
          erlang:send(Pid, {get, {self(), Tx}, Key}),
          wait_for_reply(Tx, proplists:get_value(timeout, Opts, ?TIMEOUT));
+      % key is locked
       {locked, _} ->
          timer:sleep(100), 
-         do_get(Uid, Key, P, Opts);
+         do_get(Uid, Key, P#pts{attempt=A - 1}, Opts);
+      % key process is exists
       {active, Pid}    -> 
          Tx = erlang:monitor(process, Pid),
          erlang:send(Pid, {get, {self(), Tx}, Key}),

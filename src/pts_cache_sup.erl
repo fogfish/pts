@@ -36,7 +36,7 @@ start_link(TTL) ->
 init([TTL]) ->
    {ok,
       {
-         {simple_one_for_one, 10, 60},
+         {simple_one_for_one, 10, 3600},
          [cache(TTL)]
       }
    }.

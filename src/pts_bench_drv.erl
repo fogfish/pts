@@ -37,6 +37,7 @@ new(_Id) ->
 run(put, KeyGen, ValGen, S) ->
    case (catch pts:put(kv, KeyGen(), ValGen())) of
       ok -> {ok, S};
+      %E  -> io:format("p -> ~p~n", [E]), {error, failed, S}
       _  -> {error, failed, S}
    end;
 
@@ -44,12 +45,14 @@ run(get, KeyGen, _ValueGen, S) ->
    case (catch pts:get(kv, KeyGen())) of
       Val when is_binary(Val) -> {ok, S};
       undefined               -> {ok, S};
+      %E -> io:format("g -> ~p~n", [E]), {error, failed, S}
       _ -> {error, failed, S}
    end;
 
 run(remove, KeyGen, _ValueGen, S) ->
    case (catch pts:remove(kv, KeyGen())) of
       ok -> {ok, S};
+      %E  -> io:format("r -> ~p~n", [E]), {error, failed, S}
       _  -> {error, failed, S}
    end.
 
