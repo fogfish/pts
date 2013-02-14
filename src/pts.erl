@@ -50,11 +50,12 @@ new(Ns) ->
    new(Ns, []).
    
 new(Ns, Opts) ->
-   supervisor:start_child(pts_sup, {
+   {ok, _} = supervisor:start_child(pts_sup, {
       Ns,
       {pts_ns, start_link, [init(Opts, #pts{ns=Ns, owner=self()})]},
       transient, 5000, worker, dynamic
-   }).
+   }),
+   ok.
 
 init([{keylen, X} | T], P) ->
    init(T, P#pts{keylen=X}); 

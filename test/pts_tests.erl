@@ -69,7 +69,7 @@ pts_dat_mgmt_test_() ->
       setup,
       fun() -> 
          application:start(pts),
-         pts:new(?PTS, [
+         ok = pts:new(?PTS, [
             {supervisor, pts_cache_sup}
          ])
       end,
