@@ -113,8 +113,13 @@ new_lock(Ns, Uid) ->
 try_lock(Ns, Uid, {_, Owner}=Lock) ->
    % validates if existed lock valid
    case is_uid_alive(Owner) of
-      true  -> Lock;
-      false -> new_lock(Ns, Uid)
+      % lock owner is alive
+      true  -> 
+         Lock;
+      % lock owner is dead, try again
+      false -> 
+         ets:delete(pns, {Ns, Uid}),
+         new_lock(Ns, Uid)
    end.
 
 %%
