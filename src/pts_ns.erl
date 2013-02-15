@@ -47,8 +47,13 @@ init_ns_sup(Mod) ->
 
 terminate(_Reason, #pts{ns=Ns}) ->
    ets:delete(pts, Ns),
-   supervisor:terminate_child(pts_sup, Ns),
-   supervisor:delete_child(pts_sup, Ns),
+   % TODO: fix pure hack
+   spawn(
+      fun() ->
+         supervisor:terminate_child(pts_sup, Ns),
+         supervisor:delete_child(pts_sup, Ns)
+      end
+   ),
    ok.
 
 
