@@ -32,6 +32,12 @@
 start_link(Bucket) ->
    gen_server:start_link(?MODULE, [Bucket], []).
   
+init([#pts{owner=Owner, supervisor=undefined}=Bucket]) ->
+   % readonly namespace
+   erlang:monitor(process, Owner),
+   ets:insert(pts, Bucket),
+   {ok, Bucket};
+
 init([#pts{owner=Owner, supervisor=Spec}=Bucket]) ->
    erlang:monitor(process, Owner),
    {ok, Sup} = init_ns_sup(Spec),
