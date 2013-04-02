@@ -26,7 +26,7 @@
 %% Management
 -export([new/1, new/2, drop/1, i/1, i/2]).
 %% Hashtable
--export([put/3, put/4, get/2, get/3, remove/2, remove/3]).
+-export([put/3, put/4, get/2, get/3, remove/2, remove/3, call/3]).
 %% map/fold
 -export([map/2, map/3, fold/3, fold/4]).
 
@@ -63,7 +63,7 @@ init([{keylen, X} | T], P) ->
 init([{supervisor, Mod} | T], P) ->
    init(T, P#pts{supervisor=Mod});
 
-init([{supervisor, Mod, Opts} | T], #pts{ns=Ns}=P) ->
+init([{supervisor, Mod, Opts} | T], P) ->
    init(T, P#pts{supervisor={Mod, Opts}});
 
 init([readonly | T], P) ->
@@ -259,6 +259,43 @@ cast_remove(undefined, _Key, _P, _Opts) ->
 
 cast_remove(Pid, Key, #pts{}, _Opts) ->
    erlang:send(Pid, {remove, Key}).
+
+%%
+%% 
+call(Ns, Key, Msg) ->
+   case ets:lookup(pts, Ns) of
+      [] -> throw({nonamespace, Ns});
+      [#pts{keylen=KLen}=P] -> do_call(key_to_uid(Key, KLen), Key, P, Msg)
+   end.
+
+do_call(Uid, Key, #pts{ns=Ns}=P, Msg) ->
+   case pns:whereis(Ns, Uid) of
+      undefined ->
+         call_through(Uid, Key, P, Msg);
+      Pid       ->
+         gen_server:call(Pid, Msg)
+   end.
+
+call_through(_Uid, Key, #pts{rthrough=false}, _Msg) ->
+   throw({not_found, Key});
+
+call_through(_Uid, Key, #pts{ns=Ns, attempt=0}, _Msg) ->
+   throw({nolock, {Ns, Key}});
+
+call_through(Uid, Key, #pts{ns=Ns, supervisor=Sup, attempt=A}=P, Msg) ->
+   case pns:lock(Ns, Uid) of
+      true   ->
+         Pid = create_process(Sup, Ns, Uid),
+         gen_server:call(Pid, Msg);
+      % key is locked
+      {locked, _} ->
+         timer:sleep(100), 
+         do_call(Uid, Key, P#pts{attempt=A - 1}, Msg);
+      % key process is exists
+      {active, Pid}    -> 
+         gen_server:call(Pid, Msg)
+   end.
+
 
 %%
 %% map(Tab, Fun) -> List
