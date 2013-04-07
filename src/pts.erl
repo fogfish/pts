@@ -64,7 +64,7 @@ init([{supervisor, Mod} | T], P) ->
    init(T, P#pts{supervisor=Mod});
 
 init([{supervisor, Mod, Opts} | T], P) ->
-   init(T, P#pts{supervisor={Mod, Opts}});
+   init(T, P#pts{supervisor={Mod, Opts}, opts=Opts});
 
 init([readonly | T], P) ->
    init(T, P#pts{readonly=true});

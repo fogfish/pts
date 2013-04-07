@@ -9,6 +9,7 @@
    immutable = false :: boolean(),      % write-once (written value cannot be changed)
    supervisor        :: atom() | pid(), % element supervisor (simple_one_for_one)
    attempt   = 5     :: integer(),      % number of attempts to acquire lock
-   owner                                % owner process pid
+   owner,                               % owner process pid
+   opts
 }).
 -define(TIMEOUT, 10000).
