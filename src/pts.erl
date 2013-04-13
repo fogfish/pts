@@ -71,8 +71,8 @@ i(Prop, Ns) ->
 %% put value
 -spec(put/3  :: (atom(), any(), any()) -> ok | {error, any()}).
 -spec(put/4  :: (atom(), any(), any(), timeout()) -> ok | {error, any()}).
--spec(put_/3 :: (atom(), any(), any()) -> {ok, reference()} | {error, any()}).
--spec(put_/4 :: (atom(), any(), any(), boolean()) -> ok | {ok, reference()} | {error, any()}).
+-spec(put_/3 :: (atom(), any(), any()) -> reference() | {error, any()}).
+-spec(put_/4 :: (atom(), any(), any(), boolean()) -> ok | reference() | {error, any()}).
 
 put(Ns, Key, Val) ->
    pts:put(Ns, Key, Val, ?DEF_TIMEOUT).
@@ -86,7 +86,7 @@ put_(Ns, Key, Val) ->
 put_(Ns, Key, Val,  true) ->
    Tx = erlang:make_ref(),
    gen_server:cast(pns:whereis(Ns), {put, {tx, self(), Tx}, Key, Val}),
-   {ok, Tx};
+   Tx;
 
 put_(Ns, Key, Val, false) ->
    erlang:send(pns:whereis(Ns), {put, Key, Val}),
@@ -94,10 +94,10 @@ put_(Ns, Key, Val, false) ->
 
 %%
 %% get value
--spec(get/2  :: (atom(), any()) -> {ok, any()} | {error, any()}).
--spec(get/3  :: (atom(), any(), timeout()) -> {ok, any()} | {error, any()}).
--spec(get_/2 :: (atom(), any()) -> {ok, reference()} | {error, any()}).
--spec(get_/3 :: (atom(), any(), boolean()) -> ok | {ok, reference()} | {error, any()}).
+-spec(get/2  :: (atom(), any()) -> any() | {error, any()}).
+-spec(get/3  :: (atom(), any(), timeout()) -> any() | {error, any()}).
+-spec(get_/2 :: (atom(), any()) -> reference() | {error, any()}).
+-spec(get_/3 :: (atom(), any(), boolean()) -> ok | reference() | {error, any()}).
 
 get(Ns, Key) ->
    pts:get(Ns, Key, ?DEF_TIMEOUT).
@@ -111,7 +111,7 @@ get_(Ns, Key) ->
 get_(Ns, Key, true) ->
    Tx = erlang:make_ref(),
    gen_server:cast(pns:whereis(Ns), {get, {tx, self(), Tx}, Key}),
-   {ok, Tx};
+   Tx;
 
 get_(Ns, Key, false) ->
    erlang:send(pns:whereis(Ns), {get, Key}),
@@ -121,9 +121,9 @@ get_(Ns, Key, false) ->
 %%
 %% remove value
 -spec(remove/2  :: (atom(), any()) -> ok | {error, any()}).
--spec(remove/3  :: (atom(), any(), timeout()) -> {ok, reference()} | {error, any()}).
--spec(remove_/2 :: (atom(), any()) -> ok | {error, any()}).
--spec(remove_/3 :: (atom(), any(),boolean()) -> ok | {ok, reference()} | {error, any()}).
+-spec(remove/3  :: (atom(), any(), timeout()) -> ok | {error, any()}).
+-spec(remove_/2 :: (atom(), any()) -> reference() | {error, any()}).
+-spec(remove_/3 :: (atom(), any(),boolean()) -> ok | reference() | {error, any()}).
 
 remove(Ns, Key) ->
    pts:remove(Ns, Key, ?DEF_TIMEOUT).
@@ -137,7 +137,7 @@ remove_(Ns, Key) ->
 remove_(Ns, Key, true) ->
    Tx = erlang:make_ref(),
    gen_server:cast(pns:whereis(Ns), {remove, {tx, self(), Tx}, Key}),
-   {ok, Tx};
+   Tx;
 
 remove_(Ns, Key, false) ->
    erlang:send(pns:whereis(Ns), {remove, Key}),

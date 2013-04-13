@@ -94,6 +94,6 @@ fold_test() ->
 
 
 %%
-'<<'({ok, Ref}) ->
+'<<'(Ref) ->
    receive {Ref, Msg} -> Msg end.
 
