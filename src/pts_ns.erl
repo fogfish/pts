@@ -43,9 +43,10 @@
 %%
 %%
 start_link(Sup, Name, Opts) ->
-   gen_server:start_link({local, Name}, ?MODULE, [Sup, Name, Opts], []).
+   gen_server:start_link(?MODULE, [Sup, Name, Opts], []).
 
 init([Sup, Name, Opts]) ->
+   ok = pns:register(Name),
    self() ! {set_factory, Sup}, % message to itself, avoid supervisor deadlock
    {ok, init(Opts, #pts{name=Name})}.
 
@@ -56,7 +57,7 @@ init([readonly | Opts],  S) ->
    init(Opts, S#pts{readonly=true});
 
 init([immutable | Opts], S) ->
-   init(S, S#pts{immutable=true});
+   init(Opts, S#pts{immutable=true});
 
 init(['read-through' | Opts], S) ->
    init(Opts, S#pts{rthrough=true});

@@ -20,9 +20,11 @@
 -behaviour(gen_server).
 -author(dmkolesnikov@gmail.com).
 
--export([start_link/3]).
-%% gen_server
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([
+   start_link/2, start_link/3,
+   %% gen_server
+   init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3
+]).
 
 -record(srv, {
    ns,        % name space
@@ -34,6 +36,9 @@
 
 %%
 %%
+start_link(Ns, Uid) ->
+  gen_server:start_link(?MODULE, [60000, Ns, Uid], []).
+
 start_link(TTL, Ns, Uid) ->
   gen_server:start_link(?MODULE, [TTL, Ns, Uid], []).
   

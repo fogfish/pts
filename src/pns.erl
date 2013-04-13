@@ -26,7 +26,10 @@
 -export([
    start_link/0, 
    %% api
-   register/2, register/3, unregister/2, whereis/2, whatis/2, lookup/2, map/2, fold/3,
+   register/1, register/2, register/3, unregister/1, unregister/2, 
+   whereis/1, whereis/2, whatis/1, whatis/2, lookup/1, lookup/2, 
+   map/2, fold/3,
+   '!'/2, '!'/3,
 
    %% gen_server
    init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3
@@ -42,11 +45,15 @@ start_link() ->
 %%
 %% Associates Uid with a Pid of current process.
 %% Fails with badarg if association exists and associated process is alive
+-spec(register/1 :: (any()) -> ok).
 -spec(register/2 :: (any(), any()) -> ok).
 -spec(register/3 :: (any(), any(), pid()) -> ok).
 
+register(Uid) ->
+   pns:register(local, Uid).
+
 register(Ns, Uid) ->
-   ?MODULE:register(Ns, Uid, self()).
+   pns:register(Ns, Uid, self()).
 
 register(Ns, Uid, Pid) ->
    case ets:insert_new(pns, {{Ns, Uid}, Pid}) of
@@ -66,7 +73,11 @@ register(Ns, Uid, Pid) ->
 
 %%
 %% Removes the registered Uid association with a Pid.
+-spec(unregister/1 :: (any()) -> ok).
 -spec(unregister/2 :: (any(), any()) -> ok).
+
+unregister(Uid) ->
+   pns:unregister(local, Uid).
 
 unregister(Ns, Uid) ->
    ets:delete(pns, {Ns, Uid}),
@@ -75,7 +86,11 @@ unregister(Ns, Uid) ->
 %%
 %% Returns the Pid assotiated with Uid. 
 %% Returns undefined if the name is not registered.   
+-spec(whereis/1 :: (any()) -> pid() | undefined).
 -spec(whereis/2 :: (any(), any()) -> pid() | undefined).
+
+whereis(Uid) ->
+   pns:whereis(local, Uid).
 
 whereis(Ns, Uid) ->
    case ets:lookup(pns, {Ns, Uid}) of
@@ -90,7 +105,11 @@ whereis(Ns, Uid) ->
  
 %%
 %% Returns all Uid associated with Pid
+-spec(whatis/1 :: (pid()) -> [pid()]).
 -spec(whatis/2 :: (any(), pid()) -> [pid()]).
+
+whatis(Pid) ->
+   pns:whatis(local, Pid).
 
 whatis(Ns, Pid) ->
    ets:select(pns, 
@@ -100,16 +119,33 @@ whatis(Ns, Pid) ->
    ).
 
 %%
-%%
+%% lookup
+-spec(lookup/1 :: (any()) -> [pid()]).
 -spec(lookup/2 :: (any(), any()) -> [pid()]).
 
-lookup(Ns, Uid) ->
+lookup(Mask) ->
+   lookup(local, Mask).
+
+lookup(Ns, Mask) ->
    List = ets:select(pns, 
       [
-         {{{Ns, Uid}, '_'}, [], ['$_']}
+         {{{Ns, Mask}, '_'}, [], ['$_']}
       ]
    ),
    [{Key, Pid} || {{_, Key}, Pid} <- List, is_process_alive(Pid)].
+
+%%
+%% send message to processes matching mask 
+'!'(Mask, Msg) ->
+   pns:'!'(local, Mask, Msg).
+
+'!'(Ns, Mask, Msg) ->
+   List = ets:select(pns, 
+      [
+         {{{Ns, Mask}, '_'}, [], ['$_']}
+      ]
+   ),
+   [Pid ! Msg || {{_, _}, Pid} <- List, is_process_alive(Pid)].
 
 
 %%
