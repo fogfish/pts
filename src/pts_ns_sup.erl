@@ -17,29 +17,46 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 %%  @description
-%%     name-space supervisor
+%%     name space supervisor
 -module(pts_ns_sup).
 -behaviour(supervisor).
 
--export([start_link/0, init/1]).
--export([append/2]).
+-export([
+   start_link/2, init/1,
+   factory/1
+]).
 
 %%
 %%
-start_link() ->
-   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+start_link(Name, Opts) ->
+   supervisor:start_link(?MODULE, [Name, Opts]).
    
-init(_) -> 
+init([Name, Opts]) -> 
    {ok,
       {
-         {one_for_one, 2, 3600},  % 2 failure in hour
-         []
+         {one_for_all, 4, 1800}, 
+         [ns_spec(Name, Opts), factory_spec(Name, Opts)]
       }
    }.
 
-append(Mod, Opts) ->
-   supervisor:start_child(?MODULE, {
-      Mod,
-      {pts_factory, start_link, [Mod, Opts]},
-      permanent, brutal_kill, supervisor, dynamic
-   }).
+ns_spec(Name, Opts) ->
+   {
+      ns,
+      {pts_ns, start_link, [self(), Name, Opts]},
+      permanent, 60000, worker, dynamic
+   }.
+
+factory_spec(_, Opts) ->
+   {entity, Entity} = lists:keyfind(entity, 1, Opts),
+   {
+      factory,
+      {pts_entity_sup, start_link, [Entity]},
+      permanent, 30000, supervisor, dynamic
+   }.
+
+%%
+%%
+factory(Sup) ->
+   {_, Pid, _, _} = lists:keyfind(factory, 1, supervisor:which_children(Sup)),
+   {ok, Pid}.
+

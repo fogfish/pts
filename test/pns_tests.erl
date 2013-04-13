@@ -23,21 +23,25 @@
 -define(KEY1, key1).
 -define(KEY2, {key, 1}).
 -define(KEY3, key3).
+-define(KEY4, key4).
 
 -define(NS1,  ns1).
 -define(NS2,  ns2).
 
 
-start_test() ->
-   application:start(pts).
-   
+init_test() ->
+   {ok, _} = pns:start_link().
+
 register_test() ->
-   ?assert(
-      ok =:= pns:register(?NS1, ?KEY1, self())
-   ),
-   ?assert(
-      ok =:= pns:register(?NS2, ?KEY2, self())
-   ).
+   ok = pns:register(?NS1, ?KEY1),
+   ok = pns:register(?NS2, ?KEY2, self()),
+
+   {badarg, _} = (catch pns:register(?NS1, ?KEY1, self())),
+
+   spawn(fun() -> pns:register(?NS1, ?KEY3) end),
+   timer:sleep(10),
+   ok = pns:register(?NS1, ?KEY3, self()).
+
    
 whereis_test() ->
    ?assert(
@@ -47,41 +51,19 @@ whereis_test() ->
       self() =:= pns:whereis(?NS2, ?KEY2)
    ),
    ?assert(
-      undefined =:= pns:whereis(?NS1, ?KEY3)
+      undefined =:= pns:whereis(?NS1, ?KEY4)
    ).
    
 whatis_test() ->
-   Keys1 = pns:whatis(?NS1, self()),
-   ?assert(lists:member(?KEY1, Keys1)),
-   ?assert(not lists:member(?KEY2, Keys1)),
+   [?KEY1, ?KEY3] = pns:whatis(?NS1, self()),
+   [?KEY2] = pns:whatis(?NS2, self()).
 
-   Keys2 = pns:whatis(?NS2, self()),
-   ?assert(not lists:member(?KEY1, Keys2)),
-   ?assert(lists:member(?KEY2, Keys2)).
-   
-map_test() ->
-   Keys1 = pns:map(?NS1, fun({Uid, _}) -> Uid end),
-   ?assert(lists:member(?KEY1, Keys1)),
-   ?assert(not lists:member(?KEY2, Keys1)),
+lookup_test() ->
+   [{?KEY1, _}, {?KEY3, _}] = pns:lookup(?NS1, '_'),
+   [{?KEY2, _}] = pns:lookup(?NS2, {key, '_'}).
 
-   Keys2 = pns:map(?NS2, fun({Uid, _}) -> Uid end),
-   ?assert(not lists:member(?KEY1, Keys2)),
-   ?assert(lists:member(?KEY2, Keys2)).
-   
-fold_test() ->   
-   Keys1 = pns:fold(?NS1, [], fun({Uid, _}, A) -> [Uid | A] end),
-   ?assert(lists:member(?KEY1, Keys1)),
-   ?assert(not lists:member(?KEY2, Keys1)),
 
-   Keys2 = pns:fold(?NS2, [], fun({Uid, _}, A) -> [Uid | A] end),
-   ?assert(not lists:member(?KEY1, Keys2)),
-   ?assert(lists:member(?KEY2, Keys2)).
-   
 unregister_test() ->
-   ?assert(
-      ok =:= pns:unregister(?NS1, ?KEY1)
-   ),
-   ?assert(
-      ok =:= pns:unregister(?NS2, ?KEY2)
-   ).
+   ok = pns:unregister(?NS1, ?KEY1),
+   ok = pns:unregister(?NS2, ?KEY2).
    

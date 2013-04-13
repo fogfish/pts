@@ -38,55 +38,48 @@ start_link(TTL, Ns, Uid) ->
   gen_server:start_link(?MODULE, [TTL, Ns, Uid], []).
   
 init([TTL, Ns, Uid]) ->
-   %try
-   %process_flag(trap_exit, true),
    pns:register(Ns, Uid),
-   %io:format("spawn ~p: ~p@~p~n", [self(), Uid, Ns]),
    {ok, #srv{ns=Ns, uid=Uid, ttl=TTL}}.
-    %catch K:R ->
-    %   io:format("---->~p ~p ~p~n", [K,R, Uid]),
-    %   {stop, normal}
-    %end.
   
 terminate(_Reason, #srv{ns=Ns, uid=Uid}) ->
    pns:unregister(Ns, Uid),
-   %io:format("dies: ~p@~p~n", [Uid, Ns]),
    ok.
 
 %%
 %%
+handle_call({ttl, TTL}, _Tx, S) ->
+   {reply, ok, S#srv{ttl = TTL}, TTL};
+
+handle_call(ttl, _Tx, #srv{ttl=TTL}=S) ->
+   {reply, {ok, TTL}, S, TTL};
+
 handle_call(_, _Tx, #srv{ttl=TTL}=S) ->
    {noreply, S, TTL}.
 
 %%
 %%
+handle_cast({ttl, TTL}, S) ->
+   {noreply, S#srv{ttl = TTL}, TTL};
+
 handle_cast(_, #srv{ttl=TTL}=S) ->
    {noreply, S, TTL}.
 
 %%
 %%
 handle_info({put, Tx, Key, Val}, #srv{ttl=TTL}=S) ->
-   gen_server:reply(Tx, ok),
-   %io:format("put [sync]  ~p=~p~n", [Key, Val]),
+   pts:ack(Tx, ok),
    {noreply, S#srv{key=Key, val=Val}, TTL};
-
-handle_info({put, Key, Val}, #srv{ttl=TTL}=S) ->
-   %io:format("put [async] ~p=~p~n", [Key, Val]),
-   {noreply, S#srv{key=Key, val=Val}, TTL};
-
 
 handle_info({get, Tx, _Key}, #srv{ttl=TTL, val=Val}=S) ->
-   gen_server:reply(Tx, {ok, Val}),
+   pts:ack(Tx, Val),
    {noreply, S, TTL};
 
 handle_info({remove, Tx, _Key}, #srv{ns=Ns, uid=Uid}=S) ->
-   pns:unregister(Ns, Uid),
-   gen_server:reply(Tx, ok),
+   pts:ack(Tx, ok),
    {stop, normal, S#srv{val=undefined}};
 
-handle_info({remove, _Key}, #srv{ns=Ns, uid=Uid}=S) ->
-   pns:unregister(Ns, Uid),
-   {stop, normal, S#srv{val=undefined}};
+handle_info({ttl, TTL}, S) ->
+   {noreply, S#srv{ttl = TTL}, TTL};
 
 handle_info(timeout, S) ->
    {stop, normal, S}.

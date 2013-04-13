@@ -16,7 +16,7 @@
 %%
 %%   @description
 %%      basho_bench driver
--module(pts_bench_drv).
+-module(pts_benchmark).
 
 -export([new/1, run/4]).
 
@@ -30,30 +30,31 @@ new(_Id) ->
       lager:error("mets failed: ~p", [Err]),
       halt(1)
    end,
-   {ok, undefined}.
+   Timeout = basho_bench_config:get(timeout, 30000),
+   {ok, Timeout}.
 
 %%
 %%
 run(put, KeyGen, ValGen, S) ->
-   case (catch pts:put(kv, KeyGen(), ValGen())) of
+   Key = KeyGen(),
+   case (catch pts:put(kv, Key, ValGen(), S)) of
       ok -> {ok, S};
-      %E  -> io:format("p -> ~p~n", [E]), {error, failed, S}
-      _  -> {error, failed, S}
+      E  -> {error, failure(p, Key, E), S}
    end;
 
 run(get, KeyGen, _ValueGen, S) ->
-   case (catch pts:get(kv, KeyGen())) of
+   Key = KeyGen(),
+   case (catch pts:get(kv, Key, S)) of
       Val when is_binary(Val) -> {ok, S};
       undefined               -> {ok, S};
-      %E -> io:format("g -> ~p~n", [E]), {error, failed, S}
-      _ -> {error, failed, S}
+      E -> {error, failure(g, Key, E), S}
    end;
 
 run(remove, KeyGen, _ValueGen, S) ->
-   case (catch pts:remove(kv, KeyGen())) of
+   Key = KeyGen(),
+   case (catch pts:remove(kv, Key, S)) of
       ok -> {ok, S};
-      %E  -> io:format("r -> ~p~n", [E]), {error, failed, S}
-      _  -> {error, failed, S}
+      E  -> {error, failure(r, Key, E), S}
    end.
 
 
@@ -70,7 +71,18 @@ init() ->
       {error, {already_started, _}} ->
          ok;
       ok ->
-         TTL = basho_bench_config:get(ttl, 30000),
-         pts:new(kv, ['read-through', {supervisor, pts_cache_sup, [TTL]}])
+         TTL     = basho_bench_config:get(ttl, 30000),
+         {ok, _} = pts:start_link(kv, [
+            'read-through',
+            {entity, {pts_cache, start_link, [TTL]}}
+         ])
    end.
+
+%%
+%%
+failure(Tag, _Key, E) ->
+   %io:format("----> ~p~n", [process_info(pns:whereis(kv, Key))]),
+   io:format("~s -> ~p~n", [Tag, E]),
+   failed.
+
 

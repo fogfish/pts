@@ -17,58 +17,70 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 %%  @description
-%%     process namespace
+%%     process name space
 %%
 -module(pns).
 -author(dmkolesnikov@gmail.com).
 -include_lib("stdlib/include/qlc.hrl").
 
--export([register/2, register/3, unregister/2, whereis/2, whatis/2, lock/2, unlock/2, map/2, fold/3]).
+-export([
+   start_link/0, 
+   %% api
+   register/2, register/3, unregister/2, whereis/2, whatis/2, lookup/2, map/2, fold/3,
+
+   %% gen_server
+   init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3
+]).
 
 %%
-%% register(Ns, Uid, Pid) -> ok
-%% register(Ns, Uid)
-%%   Ns  = atom()
-%%   Uid = term()
+%% create new pns
+-spec(start_link/0 :: () -> {ok, pid()} | {error, any()}).
+
+start_link() ->
+   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
 %%
 %% Associates Uid with a Pid of current process.
-%% Failes with badarg is assotiation exists and assotaited process is alive
-%%
+%% Fails with badarg if association exists and associated process is alive
+-spec(register/2 :: (any(), any()) -> ok).
+-spec(register/3 :: (any(), any(), pid()) -> ok).
+
 register(Ns, Uid) ->
    ?MODULE:register(Ns, Uid, self()).
+
 register(Ns, Uid, Pid) ->
-   case ?MODULE:whereis(Ns, Uid) of
-      undefined   -> 
-         ets:insert(pns, {{Ns, Uid}, Pid}),
+   case ets:insert_new(pns, {{Ns, Uid}, Pid}) of
+      true  -> 
          ok;
-      {locked, _} ->
-         ets:insert(pns, {{Ns, Uid}, Pid}),
-         ok;
-      Old when Old =:= Pid ->
-         ok;
-      Old ->
-         throw({registered, Old})
-   end. 
+      false ->
+         % existed key might be associated with dead processes
+         % parallel register to same key are plausible
+         % handle update via server
+         case gen_server:call(?MODULE, {register, Ns, Uid, Pid}) of
+            ok -> 
+               ok;
+            _  -> 
+               throw({badarg, {Ns, Uid}})
+         end
+   end.
 
 %%
-%% unregister(Ns, Uid) -> ok
-%%
-%% Removes the registered Uid associatation with a Pid.
+%% Removes the registered Uid association with a Pid.
+-spec(unregister/2 :: (any(), any()) -> ok).
+
 unregister(Ns, Uid) ->
    ets:delete(pns, {Ns, Uid}),
    ok.
 
 %%
-%% whereis(Ns, Uid) -> pid() | undefined
-%%
 %% Returns the Pid assotiated with Uid. 
 %% Returns undefined if the name is not registered.   
+-spec(whereis/2 :: (any(), any()) -> pid() | undefined).
+
 whereis(Ns, Uid) ->
    case ets:lookup(pns, {Ns, Uid}) of
-      [{_, {locked, _}}] ->
-         undefined;      
       [{_, Pid}] ->
-         case is_uid_alive(Pid) of
+         case is_process_alive(Pid) of
             true  -> Pid;
             false -> undefined
          end;
@@ -77,102 +89,101 @@ whereis(Ns, Uid) ->
    end.   
  
 %%
-%% whatis(Ns, Pid) -> [Uid]
-%%
-%% Returns the Uid assotiated with Pid, (reversive lookup)
-%% Returns undefined if the Pid not found
+%% Returns all Uid associated with Pid
+-spec(whatis/2 :: (any(), pid()) -> [pid()]).
+
 whatis(Ns, Pid) ->
-   ets:select(pns, [{{{Ns, '$1'}, Pid}, [], ['$1']}]).
-   
-%%
-%% lock(Ns, Uid) -> true | {locked, Pid} | {active, Pid}
-%%
-%% lock a key 
-lock(Ns, Uid) ->
-   case ets:lookup(pns, {Ns, Uid}) of
-      % uid is not locked, try to get one
-      [] -> new_lock(Ns, Uid);
-      % check that lock owner process is alive
-      [{_, {locked, Pid}}] -> try_lock(Ns, Uid, {locked, Pid});
-      % check that key owner process is alive
-      [{_, Pid}]           -> try_lock(Ns, Uid, {active, Pid})
-   end.
-
-new_lock(Ns, Uid) ->
-   % second phase, attempts to accrue a new lock
-   case ets:insert_new(pns, {{Ns, Uid}, {locked, self()}}) of
-      true  -> 
-         true;
-      false -> 
-         case ets:lookup(pns, {Ns, Uid}) of
-            [{_, {locked, Pid}}] -> try_lock(Ns, Uid, {locked, Pid});
-            [{_, Pid}]           -> try_lock(Ns, Uid, {active, Pid})
-         end
-   end.   
-
-try_lock(Ns, Uid, {_, Owner}=Lock) ->
-   % validates if existed lock valid
-   case is_uid_alive(Owner) of
-      % lock owner is alive
-      true  -> 
-         Lock;
-      % lock owner is dead, try again
-      false -> 
-         ets:delete(pns, {Ns, Uid}),
-         new_lock(Ns, Uid)
-   end.
+   ets:select(pns, 
+      [
+         {{{Ns, '$1'}, Pid}, [], ['$1']}
+      ]
+   ).
 
 %%
-%% unlock(Ns, Uid) -> true | false
-unlock(Ns, Uid) ->
-   case ets:lookup(pns, {Ns, Uid}) of
-      % check that lock owner process is alive
-      [{_, {locked, Pid}}] when Pid =:= self() -> 
-         ets:delete(pns, {Ns, Uid});
-      % check that key owner process is alive
-      [{_, Pid}]           -> 
-         case is_uid_alive(Pid) of
-            true  -> false; % key is locked or used by process
-            false -> true 
-         end
-   end.
+%%
+-spec(lookup/2 :: (any(), any()) -> [pid()]).
+
+lookup(Ns, Uid) ->
+   List = ets:select(pns, 
+      [
+         {{{Ns, Uid}, '_'}, [], ['$_']}
+      ]
+   ),
+   [{Key, Pid} || {{_, Key}, Pid} <- List, is_process_alive(Pid)].
 
 
 %%
-%% map(Ns, Fun) -> [...]
-%%   Fun = fun({Uid, Pid}) -> ...
-map(Ns0, Fun) ->
+%% map function over name space
+%% Fun = fun({Uid, Pid}) 
+-spec(map/2 :: (function(), atom()) -> list()).
+
+map(Fun, Ns0) ->
    qlc:e(
       qlc:q([ 
          Fun({Uid, Pid}) 
-         || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_uid_alive(Pid)
+         || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_process_alive(Pid)
       ])
    ).
    
 %%
-%% foldl(Tab, Acc0, Fun) -> Acc
-%%
-fold(Ns0, Acc0, Fun) ->
+%% fold function
+-spec(fold/3 :: (function(), any(), atom()) -> list()).
+
+fold(Fun, Acc0, Ns0) ->
    qlc:fold(Fun, Acc0, 
       qlc:q([ 
-         {Uid, Pid} || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_uid_alive(Pid)
+         {Uid, Pid} || {{Ns, Uid}, Pid} <- ets:table(pns), Ns =:= Ns0, is_process_alive(Pid)
       ])
    ).      
-      
-   
+
+%%-----------------------------------------------------------------------------
+%%
+%% gen_server
+%%
+%%-----------------------------------------------------------------------------
+
+init(_) ->
+   _ = ets:new(pns, [
+      public,
+      named_table,
+      ordered_set,
+      {read_concurrency, true}
+   ]),
+   {ok, undefined}.
+
+terminate(_, _) ->
+   ok.
+
+%%
+handle_call({register, Ns, Uid, Pid}, _, S) ->
+   % ensure that no race-condition on registered key
+   case ?MODULE:whereis(Ns, Uid) of
+      undefined ->
+         ets:insert(pns, {{Ns, Uid}, Pid}),
+         {reply, ok, S};
+      _         ->
+         {reply, conflict, S}
+   end;
+
+handle_call(_, _, S) ->
+   {noreply, S}.
+
+%%
+handle_cast(_, S) ->
+   {noreply, S}.
+
+%%
+handle_info(_, S) ->
+   {noreply, S}.
+
+%%
+code_change(_OldVsn, S, _Extra) ->
+   {ok, S}. 
+
 %%-----------------------------------------------------------------------------
 %%
 %% private
 %%
 %%-----------------------------------------------------------------------------
-
-%%
-%% check 
-is_uid_alive(Uid) when is_pid(Uid) ->
-   is_process_alive(Uid);
-is_uid_alive({locked, Pid}) ->
-   is_process_alive(Pid);
-is_uid_alive(_) ->
-   true.
 
    

@@ -20,104 +20,80 @@
 -author(dmkolesnikov@gmail.com).
 -include_lib("eunit/include/eunit.hrl").
 
-%%-----------------------------------------------------------------------------
-%%
-%% table management
-%%
-%%-----------------------------------------------------------------------------
-% pts_tbl_mgmt_test_() ->
-%    {
-%       setup,
-%       fun()  -> application:start(pts) end,
-%       fun(_) -> application:stop(pts) end,
-%       [
-%          {"Create table", fun create_tbl1/0},
-%          {"Drop table",  fun drop_tbl1/0},
-%          {"Create table (tuple)", fun create_tbl2/0},
-%          {"Drop table (tuple)",  fun drop_tbl2/0}
-%       ]
-%    }.
+init_cache_test() ->
+   application:start(pts),
+   {ok, _} = pts:start_link(test, [
+      {entity, {pts_cache, start_link, [60000]}}
+   ]).
 
-% create_tbl1() ->
-%    ok = pts:new(test, []),
-%    [_] = pts:i().
-   
-% drop_tbl1() ->
-%    ok = pts:drop(test),
-%    [] = pts:i().
-   
-% create_tbl2() ->
-%    ok = pts:new({test, a}, []),
-%    [_] = pts:i().
-   
-% drop_tbl2() ->
-%    ok = pts:drop({test, a}),
-%    [] = pts:i().   
+put_cache_test() ->
+   ok = pts:put(test, {a, 1}, <<"val">>),
+   ok = pts:put(test, {a, 1}, <<"new">>),
 
--define(KEY, key).
--define(VAL, {key, "value"}).
--define(NEW, {key,   "new"}).
+   ok = '<<'(pts:put_(test, {a, 2}, <<"val">>)),
+   ok = '<<'(pts:put_(test, {a, 2}, <<"new">>)),
 
-%%-----------------------------------------------------------------------------
-%%
-%% data management: factory function
-%%
-%%-----------------------------------------------------------------------------
--define(PTS, "kvs:test").
-pts_dat_mgmt_test_() ->
-   {
-      setup,
-      fun() -> 
-         application:start(pts),
-         ok = pts:new(?PTS, [
-            {supervisor, pts_cache_sup}
-         ])
-      end,
-      [         
-          {"Put", fun put/0}
-         ,{"Get", fun get/0}
-         ,{"Remove", fun remove/0}
-         
-         ,{"Map", fun map/0}
-         ,{"Fold", fun fold/0}
-      ]
-   }.   
-   
+   ok = pts:put_(test, {a, 3}, <<"val">>, false),
+   ok = pts:put_(test, {a, 3}, <<"new">>, false).
 
-put() ->
-   ok = pts:put(?PTS, ?KEY, ?VAL),
-   ok = pts:put(?PTS, ?KEY, ?NEW).
-   
-get() ->
-   ?NEW = pts:get(?PTS, ?KEY).
-   
-remove() ->
-   ok = pts:remove(?PTS, ?KEY).
+get_cache_test() ->
+   <<"new">> = pts:get(test, {a, 1}),
+   <<"new">> = '<<'(pts:get_(test, {a, 2})),
+   ok        = pts:get_(test, {a, 3}, false).
 
-   
+remove_cache_test() ->
+   ok = pts:remove(test, {a, 1}),
+   ok = '<<'(pts:remove_(test, {a, 2})),
+   ok = pts:remove_(test, {a, 3}, false),
 
-map() ->
+   {error, not_found} = pts:get(test, {a, 1}),
+   {error, not_found} = '<<'(pts:get_(test, {a, 2})),
+   {error, not_found} = '<<'(pts:get_(test, {a, 3})).
+
+call_test() ->
+   ok = pts:put(test, {a, 1}, <<"val">>),
+   ok = pts:call(test, {a, 1}, {ttl, 30000}),
+   {ok, 30000} = pts:call(test, {a, 1}, ttl),
+   ok = pts:remove(test, {a, 1}).
+
+cast_test() ->
+   ok = pts:put(test, {a, 1}, <<"val">>),
+   ok = pts:cast(test, {a, 1}, {ttl, 30000}),
+   {ok, 30000} = pts:call(test, {a, 1}, ttl),
+   ok = pts:remove(test, {a, 1}).
+
+send_test() ->
+   ok = pts:put(test, {a, 1}, <<"val">>),
+   ok = pts:send(test, {a, 1}, {ttl, 30000}),
+   {ok, 30000} = pts:call(test, {a, 1}, ttl),
+   ok = pts:remove(test, {a, 1}).
+
+
+map_test() ->
    lists:foreach(
-      fun(X) -> ok = pts:put(?PTS, X, X) end,
+      fun(X) -> ok = pts:put(test, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map(?PTS, fun({K, V}) ->  K * V() end), 
+   M = pts:map(fun({K, V}) ->  K * V() end, test), 
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
    ).
    
-fold() ->
+fold_test() ->
    lists:foreach(
-      fun(X) -> ok = pts:put(?PTS, X, X) end,
+      fun(X) -> ok = pts:put(test, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(?PTS, 0, fun({K, V}, A) -> A + K * V() end),
+   M = pts:fold(fun({K, V}, A) -> A + K * V() end, 0, test),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,
       lists:seq(1,5)
-   ).   
+   ).
 
 
+%%
+'<<'({ok, Ref}) ->
+   receive {Ref, Msg} -> Msg end.
 

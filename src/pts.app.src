@@ -1,12 +1,14 @@
 {application, pts,
    [
       {description, "process term storage"},
-      {vsn, "0.6.1"},
+      {vsn, "0.7.0"},
       {modules, [
          pts,
          pns,
          pts_cache,
-         pts_cache_sup,
+         pts_entity_sup,
+         pts_ns,
+         pts_ns_sup,
          pts_sup,
          pts_app
       ]},

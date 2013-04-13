@@ -23,15 +23,16 @@
 
 
 start(_Type, _Args) ->
-   case pts_sup:start_link() of
-      {ok, Pid} ->
-         % define global tables
-         ets:new(pns, [named_table, public, ordered_set, {read_concurrency, true}]),
-         ets:new(pts, [named_table, public, ordered_set, {keypos, 2}, {read_concurrency, true}]),
-         {ok, Pid};
-      Err ->
-         Err
-   end.
+   pts_sup:start_link().
+   
+   % case pts_sup:start_link() of
+   %    {ok, Pid} ->
+   %       % define global tables
+   %       ets:new(pts, [named_table, public, ordered_set, {keypos, 2}, {read_concurrency, true}]),
+   %       {ok, Pid};
+   %    Err ->
+   %       Err
+   % end.
    
 stop(_S) ->
    ok.
