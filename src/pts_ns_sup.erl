@@ -50,9 +50,16 @@ factory_spec(_, Opts) ->
    {entity, Entity} = lists:keyfind(entity, 1, Opts),
    {
       factory,
-      {pts_entity_sup, start_link, [Entity]},
+      {pts_entity_sup, start_link, [sup_type(Opts), Entity]},
       permanent, 30000, supervisor, dynamic
    }.
+
+sup_type(Opts) ->
+   case lists:keyfind(supervisor, 1, Opts) of
+      false     -> transient;
+      {_, Type} -> Type
+   end.
+
 
 %%
 %%

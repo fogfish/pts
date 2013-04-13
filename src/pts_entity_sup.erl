@@ -22,33 +22,33 @@
 -behaviour(supervisor).
 
 -export([
-   start_link/1, init/1
+   start_link/2, init/1
 ]).
 
-start_link(Spec) ->
-   supervisor:start_link(?MODULE, [Spec]).
+start_link(Type, Spec) ->
+   supervisor:start_link(?MODULE, [Type, Spec]).
 
-init([Spec]) ->
+init([Type, Spec]) ->
    {ok,
       {
          {simple_one_for_one, 10, 60},
-         [entity(Spec)]
+         [entity(Type,Spec)]
       }
    }.
 
 
-entity(Mod) 
+entity(Type, Mod) 
  when is_atom(Mod) ->
    {
       entity, 
       {Mod, start_link, []},
-      transient, 60000, worker, dynamic
+      Type, 60000, worker, dynamic
    };
 
-entity({M, F, A}) ->
+entity(Type, {M, F, A}) ->
    {
       entity, 
       {M, F, A},
-      transient, 60000, worker, dynamic
+      Type, 60000, worker, dynamic
    }.
 
