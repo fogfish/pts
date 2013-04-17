@@ -57,7 +57,7 @@ start_link(Name, Opts) ->
 -spec(i/1 :: (atom()) -> list()).
 
 i(Ns) ->
-   gen_server:call(Ns, i).
+   gen_server:call(pns:whereis(Ns), i).
 
 %%
 %% return meta data for given table
