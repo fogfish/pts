@@ -37,7 +37,7 @@
    remove/2, remove/3, remove_/2, remove_/3, 
 
    % communicate with process
-   call/3, cast/3, send/3, ack/2,
+   call/3, call/4, cast/3, send/3, ack/2,
 
    % map, fold bucket
    map/2,  fold/3
@@ -146,9 +146,13 @@ remove_(Ns, Key, false) ->
 %%
 %% 
 -spec(call/3 :: (atom(), any(), any()) -> any()).
+-spec(call/4 :: (atom(), any(), any(), timeout()) -> any()).
 
 call(Ns, Key, Msg) ->
    gen_server:call(pns:whereis(Ns), {call, Key, Msg}).
+
+call(Ns, Key, Msg, Timeout) ->
+   gen_server:call(pns:whereis(Ns), {call, Key, Msg}, Timeout).
 
 %%
 %%
