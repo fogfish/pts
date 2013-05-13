@@ -159,7 +159,8 @@ maybe_spawn(undefined, Ns, Uid, {M, F, A}) ->
    case erlang:apply(M, F, A) of
       {ok, Pid} ->
          try
-            pns:register(Ns, Uid, Pid)
+            pns:register(Ns, Uid, Pid),
+            {ok, Pid}
          catch _:_ ->
             erlang:exit(Pid, kill),
             throw({badarg, {Ns, Uid}})
