@@ -29,7 +29,7 @@
    register/1, register/2, register/3, unregister/1, unregister/2, 
    whereis/1, whereis/2, whatis/1, whatis/2, lookup/1, lookup/2, 
    map/2, fold/3,
-   '!'/2, '!'/3,
+   '!'/2, '!'/3, spawn/3,
 
    %% gen_server
    init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3
@@ -146,6 +146,32 @@ lookup(Ns, Mask) ->
       ]
    ),
    [Pid ! Msg || {{_, _}, Pid} <- List, is_process_alive(Pid)].
+
+
+%%
+%% spawn and register processes in atomic manner
+-spec(spawn/3 :: (atom(), any(), {atom(), atom(), list()}) -> {ok, pid()} | {ok, any()}).
+
+spawn(Ns, Uid, MFA) ->
+   maybe_spawn(pns:whereis(Ns, Uid), Ns, Uid, MFA).
+
+maybe_spawn(undefined, Ns, Uid, {M, F, A}) ->
+   case erlang:apply(M, F, A) of
+      {ok, Pid} ->
+         try
+            pns:register(Ns, Uid, Pid)
+         catch _:_ ->
+            erlang:exit(Pid, kill),
+            throw({badarg, {Ns, Uid}})
+         end;
+      Error     ->
+         Error
+   end;
+
+maybe_spawn(Pid, _Ns, _Uid, _MFA) ->
+   {error,{already_started, Pid}}.
+
+
 
 
 %%
