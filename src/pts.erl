@@ -47,6 +47,8 @@
 
 %%
 %% start new bucket
+%% e.g.
+%%   {ok, _} = pts:start_link(cache, ['read-through', {entity, {pts_cache, start_link, [30000]}}])
 -spec(start_link/2 :: (pts(), list()) -> {ok, pid()} | {error, any()}).
 
 start_link(Name, Opts) ->
@@ -57,7 +59,7 @@ start_link(Name, Opts) ->
 -spec(i/1 :: (atom()) -> list()).
 
 i(Ns) ->
-   gen_server:call(pns:whereis(Ns), i).
+   gen_server:call(Ns, i).
 
 %%
 %% return meta data for given table
@@ -78,18 +80,18 @@ put(Ns, Key, Val) ->
    pts:put(Ns, Key, Val, ?DEF_TIMEOUT).
 
 put(Ns, Key, Val, Timeout) ->
-   gen_server:call(pns:whereis(Ns), {put, Key, Val}, Timeout).
+   gen_server:call(Ns, {put, Key, Val}, Timeout).
 
 put_(Ns, Key, Val) ->
    pts:put_(Ns, Key, Val, true).
 
 put_(Ns, Key, Val,  true) ->
    Tx = erlang:make_ref(),
-   gen_server:cast(pns:whereis(Ns), {put, {tx, self(), Tx}, Key, Val}),
+   gen_server:cast(Ns, {put, {tx, self(), Tx}, Key, Val}),
    Tx;
 
 put_(Ns, Key, Val, false) ->
-   erlang:send(pns:whereis(Ns), {put, Key, Val}),
+   erlang:send(Ns, {put, Key, Val}),
    ok.
 
 %%
@@ -103,20 +105,19 @@ get(Ns, Key) ->
    pts:get(Ns, Key, ?DEF_TIMEOUT).
 
 get(Ns, Key, Timeout) ->
-   gen_server:call(pns:whereis(Ns), {get, Key}, Timeout).
+   gen_server:call(Ns, {get, Key}, Timeout).
 
 get_(Ns, Key) ->
    pts:get_(Ns, Key, true).
 
 get_(Ns, Key, true) ->
    Tx = erlang:make_ref(),
-   gen_server:cast(pns:whereis(Ns), {get, {tx, self(), Tx}, Key}),
+   gen_server:cast(Ns, {get, {tx, self(), Tx}, Key}),
    Tx;
 
 get_(Ns, Key, false) ->
-   erlang:send(pns:whereis(Ns), {get, Key}),
+   erlang:send(Ns, {get, Key}),
    ok.
-
 
 %%
 %% remove value
@@ -129,18 +130,18 @@ remove(Ns, Key) ->
    pts:remove(Ns, Key, ?DEF_TIMEOUT).
 
 remove(Ns, Key, Timeout) ->   
-   gen_server:call(pns:whereis(Ns), {remove, Key}, Timeout).
+   gen_server:call(Ns, {remove, Key}, Timeout).
   
 remove_(Ns, Key) ->
    pts:remove_(Ns, Key, true).
 
 remove_(Ns, Key, true) ->
    Tx = erlang:make_ref(),
-   gen_server:cast(pns:whereis(Ns), {remove, {tx, self(), Tx}, Key}),
+   gen_server:cast(Ns, {remove, {tx, self(), Tx}, Key}),
    Tx;
 
 remove_(Ns, Key, false) ->
-   erlang:send(pns:whereis(Ns), {remove, Key}),
+   erlang:send(Ns, {remove, Key}),
    ok.
 
 %%
@@ -149,24 +150,24 @@ remove_(Ns, Key, false) ->
 -spec(call/4 :: (atom(), any(), any(), timeout()) -> any()).
 
 call(Ns, Key, Msg) ->
-   gen_server:call(pns:whereis(Ns), {call, Key, Msg}).
+   gen_server:call(Ns, {call, Key, Msg}).
 
 call(Ns, Key, Msg, Timeout) ->
-   gen_server:call(pns:whereis(Ns), {call, Key, Msg}, Timeout).
+   gen_server:call(Ns, {call, Key, Msg}, Timeout).
 
 %%
 %%
 -spec(cast/3 :: (atom(), any(), any()) -> ok).
 
 cast(Ns, Key, Msg) ->
-   gen_server:cast(pns:whereis(Ns), {cast, Key, Msg}).
+   gen_server:cast(Ns, {cast, Key, Msg}).
 
 %%
 %% 
 -spec(send/3 :: (atom(), any(), any()) -> any()).
 
 send(Ns, Key, Msg) ->
-   erlang:send(pns:whereis(Ns), {send, Key, Msg}),
+   erlang:send(Ns, {send, Key, Msg}),
    ok.
 
 %%

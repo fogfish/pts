@@ -1,5 +1,9 @@
 .PHONY: deps test
 
+ifeq ($(id),)
+export id=pts
+endif
+
 all: rebar deps compile
 
 compile:
@@ -25,7 +29,7 @@ dialyzer: compile
 	@dialyzer -Wno_return -c apps/riak_kv/ebin
 
 run:
-	erl -pa ./deps/*/ebin -pa ./ebin +P 10000000
+	erl -name ${id}@127.0.0.1 -setcookie nocookie -pa ./deps/*/ebin -pa ./ebin +P 10000000
 
 rebar:
 	curl -O http://cloud.github.com/downloads/basho/rebar/rebar
