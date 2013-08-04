@@ -20,9 +20,12 @@
 %%     entity supervisor
 -module(pts_entity_sup).
 -behaviour(supervisor).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
+
 
 -export([
-   start_link/2, init/1
+   start_link/2, 
+   init/1
 ]).
 
 start_link(Type, Spec) ->

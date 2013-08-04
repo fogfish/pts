@@ -20,35 +20,59 @@
 %%     In-Process Term Storage: the library provides hashtable-like interface 
 %%     to manipulate data distributed through Erlang processes.
 -module(pts).
--author(dmkolesnikov@gmail.com).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
+
 -include("pts.hrl").
 
+-export([start/0]).
 -export([
    start_link/2, 
-   i/1, i/2,
-
+   i/1, 
+   i/2,
+   whereis/2,
    % put key-val to bucket
-   put/3, put/4, put_/3, put_/4,
-
+   put/3, 
+   put/4, 
+   put_/3, 
+   put_/4,
    % get kev-val from bucket 
-   get/2, get/3, get_/2, get_/3,
-
+   get/2, 
+   get/3, 
+   get_/2, 
+   get_/3,
    % remove key-val from bucket
-   remove/2, remove/3, remove_/2, remove_/3, 
-
+   remove/2, 
+   remove/3, 
+   remove_/2, 
+   remove_/3, 
    % communicate with process
-   call/3, call/4, cast/3, send/3, ack/2,
-
+   call/3, 
+   call/4, 
+   cast/3,
    % map, fold bucket
-   map/2,  fold/3
+   map/2,
+   fold/3
 ]).
 
--type(pts() :: atom() | tuple()).
+-type(pts() :: atom()).
+-type(key() :: any()).
+-type(val() :: any()).
+
+%%
+%% start application
+start() ->
+   _ = application:start(pns),
+   application:start(pts).
 
 %%
 %% start new bucket
-%% e.g.
-%%   {ok, _} = pts:start_link(cache, ['read-through', {entity, {pts_cache, start_link, [30000]}}])
+%% Options:
+%%   {keylen, integer()} - length of key prefix 
+%%   readonly
+%%   immutable
+%%   'read-through'
+%%   {entity, mfa()}
+%%   supervisor
 -spec(start_link/2 :: (pts(), list()) -> {ok, pid()} | {error, any()}).
 
 start_link(Name, Opts) ->
@@ -56,7 +80,8 @@ start_link(Name, Opts) ->
 
 %%
 %% return meta data for given table
--spec(i/1 :: (atom()) -> list()).
+-spec(i/1 :: (pts()) -> list()).
+-spec(i/2 :: (atom(), pts()) -> list()).
 
 i(Ns) ->
    gen_server:call(Ns, i).
@@ -70,79 +95,87 @@ i(Prop, Ns) ->
    end.
 
 %%
-%% put value
--spec(put/3  :: (atom(), any(), any()) -> ok | {error, any()}).
--spec(put/4  :: (atom(), any(), any(), timeout()) -> ok | {error, any()}).
--spec(put_/3 :: (atom(), any(), any()) -> reference() | {error, any()}).
--spec(put_/4 :: (atom(), any(), any(), boolean()) -> ok | reference() | {error, any()}).
+%% return pid() of processes
+-spec(whereis/2 :: (pts(), key()) -> pid() | undefined).
+
+whereis(Ns, Key) ->
+   gen_server:call(Ns, {whereis, Key}).
+
+
+%%
+%% synchronous put value
+-spec(put/3  :: (pts()|pid(), key(), val()) -> ok | {error, any()}).
+-spec(put/4  :: (pts()|pid(), key(), val(), timeout()) -> ok | {error, any()}).
 
 put(Ns, Key, Val) ->
    pts:put(Ns, Key, Val, ?DEF_TIMEOUT).
 
 put(Ns, Key, Val, Timeout) ->
-   gen_server:call(Ns, {put, Key, Val}, Timeout).
+   plib:call(Ns, put, {Key, Val}, Timeout).
+
+%%
+%% asynchronous put value
+-spec(put_/3 :: (pts()|pid(), key(), val()) -> reference()).
+-spec(put_/4 :: (pts()|pid(), key(), val(), boolean()) -> reference()).
 
 put_(Ns, Key, Val) ->
    pts:put_(Ns, Key, Val, true).
 
 put_(Ns, Key, Val,  true) ->
-   Tx = erlang:make_ref(),
-   gen_server:cast(Ns, {put, {tx, self(), Tx}, Key, Val}),
-   Tx;
+   plib:cast(Ns, put, {Key, Val});
 
 put_(Ns, Key, Val, false) ->
-   erlang:send(Ns, {put, Key, Val}),
-   ok.
+   plib:send(Ns, put, {Key, Val}).
 
 %%
-%% get value
+%% synchronous get value
 -spec(get/2  :: (atom(), any()) -> any() | {error, any()}).
 -spec(get/3  :: (atom(), any(), timeout()) -> any() | {error, any()}).
--spec(get_/2 :: (atom(), any()) -> reference() | {error, any()}).
--spec(get_/3 :: (atom(), any(), boolean()) -> ok | reference() | {error, any()}).
 
 get(Ns, Key) ->
    pts:get(Ns, Key, ?DEF_TIMEOUT).
 
 get(Ns, Key, Timeout) ->
-   gen_server:call(Ns, {get, Key}, Timeout).
+   plib:call(Ns, get, Key, Timeout).
+
+%%
+%% asynchronous get value
+-spec(get_/2 :: (atom(), any()) -> reference() | {error, any()}).
+-spec(get_/3 :: (atom(), any(), boolean()) -> ok | reference() | {error, any()}).
 
 get_(Ns, Key) ->
    pts:get_(Ns, Key, true).
 
 get_(Ns, Key, true) ->
-   Tx = erlang:make_ref(),
-   gen_server:cast(Ns, {get, {tx, self(), Tx}, Key}),
-   Tx;
+   plib:cast(Ns, get, Key);
 
 get_(Ns, Key, false) ->
-   erlang:send(Ns, {get, Key}),
-   ok.
+   plib:send(Ns, put, Key).
 
 %%
-%% remove value
+%% synchronous remove value
 -spec(remove/2  :: (atom(), any()) -> ok | {error, any()}).
 -spec(remove/3  :: (atom(), any(), timeout()) -> ok | {error, any()}).
--spec(remove_/2 :: (atom(), any()) -> reference() | {error, any()}).
--spec(remove_/3 :: (atom(), any(),boolean()) -> ok | reference() | {error, any()}).
 
 remove(Ns, Key) ->
    pts:remove(Ns, Key, ?DEF_TIMEOUT).
 
 remove(Ns, Key, Timeout) ->   
-   gen_server:call(Ns, {remove, Key}, Timeout).
-  
+   plib:call(Ns, remove, Key, Timeout).
+
+%%
+%% asynchronous remove value
+-spec(remove_/2 :: (atom(), any()) -> reference() | {error, any()}).
+-spec(remove_/3 :: (atom(), any(),boolean()) -> ok | reference() | {error, any()}).
+
 remove_(Ns, Key) ->
    pts:remove_(Ns, Key, true).
 
 remove_(Ns, Key, true) ->
-   Tx = erlang:make_ref(),
-   gen_server:cast(Ns, {remove, {tx, self(), Tx}, Key}),
-   Tx;
+   plib:cast(Ns, remove, Key);
 
 remove_(Ns, Key, false) ->
-   erlang:send(Ns, {remove, Key}),
-   ok.
+   plib:send(Ns, remove, Key).
 
 %%
 %% 
@@ -162,91 +195,25 @@ call(Ns, Key, Msg, Timeout) ->
 cast(Ns, Key, Msg) ->
    gen_server:cast(Ns, {cast, Key, Msg}).
 
-%%
-%% 
--spec(send/3 :: (atom(), any(), any()) -> any()).
 
-send(Ns, Key, Msg) ->
-   erlang:send(Ns, {send, Key, Msg}),
-   ok.
 
 %%
-%% acknowledge transaction
--spec(ack/2 :: (any(), any()) -> ok).
+%% map function Fun({Key, Pid}) over name space
+-spec(map/2 :: (function(), pts()) -> list()).
 
-ack(undefined, _Msg) ->
-   ok;
-
-ack({tx, Pid, Ref}, Msg) ->
-   Pid ! {Ref, Msg};
-
-ack({_, _}=Tx, Msg) ->
-   gen_server:reply(Tx, Msg).
-
-%%
-%% map(Tab, Fun) -> List
-%%
 map(Fun, Ns) ->
-   pns:map( 
-      fun({Key, Pid}) ->
-         Getter = fun() ->
-            try
-               Ref = erlang:monitor(process, Pid),
-               erlang:send(Pid, {get, {self(), Ref}, Key}),
-               wait_for_reply(Ref, 5000)
-            catch _:_ ->
-               undefined
-            end
-         end,
-         Fun({Key, Getter})
-      end,
-      Ns
-   ).
+   pns:map(fun({_Key, _Pid}=X) -> Fun(X) end, Ns).
 
 %%
-%% foldl(Tab, Acc0, Fun) -> Acc
-%%
-fold(Fun, Acc, Ns) ->
-   pns:fold( 
-      fun({Key, Pid}, A) ->
-         Getter = fun() ->
-            try
-               Ref = erlang:monitor(process, Pid),
-               erlang:send(Pid, {get, {self(), Ref}, Key}),
-               wait_for_reply(Ref, 5000)
-            catch _:_ ->
-               undefined
-            end
-         end,
-         Fun({Key, Getter}, A)
-      end,
-      Acc, Ns
-   ).   
+%% fold function Fun({Key, Pid}, Acc) over name space
+-spec(fold/3 :: (function(), any(), pts()) -> list()).
+
+fold(Fun, Acc0, Ns) ->
+   pns:fold(fun({_Key, _Pid}=X, Acc) -> Fun(X, Acc) end, Acc0, Ns).   
 
 %%-----------------------------------------------------------------------------
 %%
 %% private
 %%
 %%-----------------------------------------------------------------------------
-
-%%
-%%
-wait_for_reply(Ref, Timeout) ->
-   receive
-      {Ref, {ok, Reply}} ->
-         erlang:demonitor(Ref, [flush]),
-         Reply;
-      {Ref, Reply} ->
-         erlang:demonitor(Ref, [flush]),
-         Reply;
-      {'DOWN', Ref, _, _, Reason} ->
-         throw(Reason)
-   after Timeout ->
-      erlang:demonitor(Ref),
-      receive
-         {'DOWN', Ref, _, _, _} -> true
-      after 0 -> true
-      end,
-      throw(timeout)
-   end.
 

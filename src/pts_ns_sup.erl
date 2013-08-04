@@ -17,12 +17,16 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 %%  @description
-%%     name space supervisor
+%%     name space supervisor, manages
+%%      * leader process
+%%      * entity factory
 -module(pts_ns_sup).
 -behaviour(supervisor).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([
-   start_link/2, init/1,
+   start_link/2, 
+   init/1,
    factory/1
 ]).
 
@@ -39,6 +43,7 @@ init([Name, Opts]) ->
       }
    }.
 
+%% name space leader
 ns_spec(Name, Opts) ->
    {
       ns,
@@ -46,6 +51,7 @@ ns_spec(Name, Opts) ->
       permanent, 60000, worker, dynamic
    }.
 
+%% name space factory
 factory_spec(_, Opts) ->
    {entity, Entity} = lists:keyfind(entity, 1, Opts),
    {

@@ -17,22 +17,13 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 -module(pts_app).
--author(dmkolesnikov@gmail.com).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([start/2, stop/1]).
 
 
 start(_Type, _Args) ->
    pts_sup:start_link().
-   
-   % case pts_sup:start_link() of
-   %    {ok, Pid} ->
-   %       % define global tables
-   %       ets:new(pts, [named_table, public, ordered_set, {keypos, 2}, {read_concurrency, true}]),
-   %       {ok, Pid};
-   %    Err ->
-   %       Err
-   % end.
    
 stop(_S) ->
    ok.

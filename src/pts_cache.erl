@@ -18,20 +18,26 @@
 %%
 -module(pts_cache).
 -behaviour(gen_server).
--author(dmkolesnikov@gmail.com).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([
-   start_link/2, start_link/3,
+   start_link/2, 
+   start_link/3,
    %% gen_server
-   init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3
+   init/1, 
+   terminate/2,
+   handle_call/3,
+   handle_cast/2, 
+   handle_info/2,  
+   code_change/3
 ]).
 
 -record(srv, {
-   ns,        % name space
-   uid,       % process identity
-   ttl,       % time-to-live in seconds
-   key,       % key
-   val        % value
+   ns  = undefined :: atom(),        % name space
+   uid = undefined :: any(),         % process identity
+   ttl = undefined :: integer(),     % time-to-live in seconds
+   key = undefined :: any(),         % key
+   val = undefined :: any()          % value
 }).
 
 %%
@@ -71,16 +77,16 @@ handle_cast(_, #srv{ttl=TTL}=S) ->
 
 %%
 %%
-handle_info({put, Tx, Key, Val}, #srv{ttl=TTL}=S) ->
-   pts:ack(Tx, ok),
+handle_info({put, Tx, {Key, Val}}, #srv{ttl=TTL}=S) ->
+   plib:ack(Tx, ok),
    {noreply, S#srv{key=Key, val=Val}, TTL};
 
 handle_info({get, Tx, _Key}, #srv{ttl=TTL, val=Val}=S) ->
-   pts:ack(Tx, Val),
+   plib:ack(Tx, Val),
    {noreply, S, TTL};
 
 handle_info({remove, Tx, _Key}, #srv{ns=Ns, uid=Uid}=S) ->
-   pts:ack(Tx, ok),
+   plib:ack(Tx, ok),
    {stop, normal, S#srv{val=undefined}};
 
 handle_info({ttl, TTL}, S) ->
@@ -94,9 +100,3 @@ handle_info(timeout, S) ->
 code_change(_OldVsn, State, _Extra) ->
    {ok, State}.     
 
-
-%%-----------------------------------------------------------------------------
-%%
-%% private
-%%
-%%-----------------------------------------------------------------------------

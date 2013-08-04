@@ -17,12 +17,13 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 -module(pts_tests).
--author(dmkolesnikov@gmail.com).
 -include_lib("eunit/include/eunit.hrl").
 
 init_cache_test() ->
+   application:start(pns),
    application:start(pts),
    {ok, _} = pts:start_link(test, [
+      {keylen, 1},
       {entity, {pts_cache, start_link, [60000]}}
    ]).
 
@@ -62,19 +63,12 @@ cast_test() ->
    {ok, 30000} = pts:call(test, {a, 1}, ttl),
    ok = pts:remove(test, {a, 1}).
 
-send_test() ->
-   ok = pts:put(test, {a, 1}, <<"val">>),
-   ok = pts:send(test, {a, 1}, {ttl, 30000}),
-   {ok, 30000} = pts:call(test, {a, 1}, ttl),
-   ok = pts:remove(test, {a, 1}).
-
-
 map_test() ->
    lists:foreach(
       fun(X) -> ok = pts:put(test, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:map(fun({K, V}) ->  K * V() end, test), 
+   M = pts:map(fun({Key, Pid}) -> io:format("--> ~p ~p~n", [Key, pts:get(Pid, Key)]), Key * pts:get(Pid, Key) end, test), 
    lists:foreach(
       fun(X) -> true = lists:member(X*X, M) end, 
       lists:seq(1,5)
@@ -85,7 +79,7 @@ fold_test() ->
       fun(X) -> ok = pts:put(test, X, X) end,
       lists:seq(1,5)
    ),
-   M = pts:fold(fun({K, V}, A) -> A + K * V() end, 0, test),
+   M = pts:fold(fun({K, V}, A) -> A + K * pts:get(V, K) end, 0, test),
    M = lists:foldl(
       fun(X, A) -> A + X*X end,
       0,

@@ -17,16 +17,21 @@
 %%  USA or retrieve online http://www.opensource.org/licenses/lgpl-3.0.html
 %%
 %%  @description
-%%     name space container
+%%     name space leader process
 -module(pts_ns).
 -behaviour(gen_server).
--author(dmkolesnikov@gmail.com).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -include("pts.hrl").
 
 -export([
    start_link/3,
-   init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3
+   init/1, 
+   terminate/2,
+   handle_call/3, 
+   handle_cast/2, 
+   handle_info/2,
+   code_change/3
 ]).
 
 %% internal state
@@ -73,74 +78,18 @@ init([], S) ->
 terminate(_, _) ->
    ok.
 
-
-% %%
-% %%
-% start_link(Bucket) ->
-%    gen_server:start_link(?MODULE, [Bucket], []).
-  
-% init([#pts{owner=Owner, supervisor=undefined}=Bucket]) ->
-%    % readonly namespace
-%    erlang:monitor(process, Owner),
-%    ets:insert(pts, Bucket),
-%    {ok, Bucket};
-
-% init([#pts{owner=Owner, supervisor=Spec}=Bucket]) ->
-%    erlang:monitor(process, Owner),
-%    {ok, Sup} = init_ns_sup(Spec),
-%    ets:insert(pts, Bucket#pts{supervisor=Sup}),
-%    {ok, Bucket#pts{supervisor=Sup}}.
-
-% init_ns_sup({Mod, Opts}) ->
-%    erlang:apply(Mod, start_link, Opts);
-
-% init_ns_sup(Mod) ->
-%    erlang:apply(Mod, start_link, []).
-
-
-% terminate(_Reason, #pts{ns=Ns}) ->
-%    ets:delete(pts, Ns),
-%    % TODO: fix pure hack
-%    spawn(
-%       fun() ->
-%          supervisor:terminate_child(pts_sup, Ns),
-%          supervisor:delete_child(pts_sup, Ns)
-%       end
-%    ),
-%    ok.
-
-
 %%
 %%
-handle_call(i, _, S) ->
+handle_call(i, _Tx, S) ->
    {reply, lists:zip(record_info(fields, pts), tl(tuple_to_list(S))), S};
 
-handle_call({put, Key, Val}, Tx, S) ->
-   case proc_put({put, Tx, Key, Val}, S) of
-      {error, Reason} ->
-         {reply, {error, Reason}, S};
-      _ ->
-         {noreply, S}
-   end;
-
-handle_call({get, Key}, Tx, S) ->
-   case proc_get({get, Tx, Key}, S) of
-      {error, Reason} ->
-         {reply, {error, Reason}, S};
-      _ ->
-         {noreply, S}
-   end;
-
-handle_call({remove, Key}, Tx, S) ->
-   case proc_remove({remove, Tx, Key}, S) of
-      {error, Reason} ->
-         {reply, {error, Reason}, S};
-      _ ->
-         {noreply, S}
-   end;
+handle_call({whereis, Key}, _Tx, S) ->
+   Uid = key_to_uid(Key, S#pts.keylen),
+   {reply, pns:whereis(S#pts.name, Uid), S};
 
 handle_call({call, Key, Req}, Tx, S) ->
-   case proc_send({send, Key, {'$gen_call', Tx, Req}}, S) of
+   ?DEBUG("pts call: bucket ~p key ~p req ~p", [S#pts.name, Key, Req]),
+   case (catch send_msg_to_key(Key, {'$gen_call', Tx, Req}, S)) of
       {error, Reason} ->
          {reply, {error, Reason}, S};
       _ ->
@@ -152,35 +101,8 @@ handle_call(_, _Tx, S) ->
 
 %%
 %%
-handle_cast({put, Tx, Key, Val}, S) ->
-   case proc_put({put, Tx, Key, Val}, S) of
-      {error, Reason} ->
-         pts:ack(Tx, {error, Reason}),
-         {noreply, S};
-      _ ->
-         {noreply, S}
-   end;
-
-handle_cast({get, Tx, Key}, S) ->
-   case proc_get({get, Tx, Key}, S) of
-      {error, Reason} ->
-         pts:ack(Tx, {error, Reason}),
-         {noreply, S};
-      _ ->
-         {noreply, S}
-   end;
-
-handle_cast({remove, Tx, Key}, S) ->
-   case proc_remove({remove, Tx, Key}, S) of
-      {error, Reason} ->
-         pts:ack(Tx, {error, Reason}),
-         {noreply, S};
-      _ ->
-         {noreply, S}
-   end;
-
 handle_cast({cast, Key, Req}, S) ->
-   proc_send({send, Key, {'$gen_cast', Req}}, S),
+   (catch send_msg_to_key(Key, {'$gen_cast', Req}, S)),
    {noreply, S};
 
 handle_cast(_, S) ->
@@ -192,21 +114,84 @@ handle_info({set_factory, Sup}, S) ->
    {ok, Pid} = pts_ns_sup:factory(Sup),
    {noreply, S#pts{factory = Pid}};
 
-handle_info({put, Key, Val}, S) ->
-   proc_put({put, undefined, Key, Val}, S),
+%%
+%% put value
+handle_info({put, Tx, {Key, Val}}, #pts{readonly=true}=S) ->
+   ?DEBUG("pts put: bucket ~p key ~p val ~p", [S#pts.name, Key, Val]),
+   plib:ack(Tx, {error, readonly}),
    {noreply, S};
 
-handle_info({get, Key}, S) ->
-   proc_get({get, undefined, Key}, S),
+handle_info({put, Tx, {Key, Val}}, #pts{immutable=true}=S) ->
+   ?DEBUG("pts put: bucket ~p key ~p val ~p", [S#pts.name, Key, Val]),
+   Uid = key_to_uid(Key, S#pts.keylen),
+   case pns:whereis(S#pts.name, Uid) of
+      undefined ->
+         {ok, Pid} = supervisor:start_child(S#pts.factory, [S#pts.name, Uid]),
+         plib:relay(Pid, put, Tx, {Key, Val}),
+         {noreply, S};
+      _Pid ->
+         plib:ack(Tx, {error, readonly}),
+         {noreply, S}
+   end;
+
+handle_info({put, Tx, {Key, Val}}, S) ->
+   ?DEBUG("pts put: bucket ~p key ~p val ~p", [S#pts.name, Key, Val]),
+   Uid = key_to_uid(Key, S#pts.keylen), 
+   case pns:whereis(S#pts.name, Uid) of
+      undefined -> 
+         {ok, Pid} = supervisor:start_child(S#pts.factory, [S#pts.name, Uid]),
+         plib:relay(Pid, put, Tx, {Key, Val}),
+         {noreply, S};
+      Pid       -> 
+         plib:relay(Pid, put, Tx, {Key, Val}),
+         {noreply, S}
+   end;
+
+%%
+%% get value
+handle_info({get, Tx, Key}, #pts{rthrough=true}=S) ->
+   ?DEBUG("pts get: bucket ~p key ~p", [S#pts.name, Key]),
+   Uid = key_to_uid(Key, S#pts.keylen), 
+   case pns:whereis(S#pts.name, Uid) of
+      undefined -> 
+         {ok, Pid} = supervisor:start_child(S#pts.factory, [S#pts.name, Uid]),
+         plib:relay(Pid, get, Tx, Key),
+         {noreply, S};
+      Pid       ->
+         plib:relay(Pid, get, Tx, Key),
+         {noreply, S}
+   end;
+
+handle_info({get, Tx, Key}, S) ->
+   ?DEBUG("pts get: bucket ~p key ~p", [S#pts.name, Key]),
+   Uid = key_to_uid(Key, S#pts.keylen),
+   case pns:whereis(S#pts.name, Uid) of
+      undefined -> 
+         plib:ack(Tx, {error, not_found}),
+         {noreply, S};
+      Pid       -> 
+         plib:relay(Pid, get, Tx, Key),
+         {noreply, S}
+   end;
+
+%%
+%% handle remove
+handle_info({remove, Tx, Key}, #pts{readonly=true}=S) ->
+   ?DEBUG("pts remove: bucket ~p key ~p", [S#pts.name, Key]),
+   plib:ack(Tx, {error, readonly}),
    {noreply, S};
 
-handle_info({remove, Key}, S) ->
-   proc_remove({remove, undefined, Key}, S),
-   {noreply, S};
-
-handle_info({send, Key, Req}, S) ->
-   proc_send({send, Key, Req}, S),
-   {noreply, S};
+handle_info({remove, Tx, Key}, S) ->
+   ?DEBUG("pts remove: bucket ~p key ~p", [S#pts.name, Key]),
+   Uid = key_to_uid(Key, S#pts.keylen),
+   case pns:whereis(S#pts.name, Uid) of
+      undefined -> 
+         plib:ack(Tx, ok),
+         {noreply, S};
+      Pid       -> 
+         plib:relay(Pid, remove, Tx, Key),
+         {noreply, S}
+   end;
 
 handle_info(_, S) ->
    {noreply, S}.
@@ -224,116 +209,28 @@ code_change(_OldVsn, S, _Extra) ->
 %%-----------------------------------------------------------------------------
 
 %%
-%% put value
-proc_put({put, _Tx, _Key, _Val}, #pts{readonly=true}) ->
-   {error, readonly};
-
-proc_put({put, Tx, Key, Val}, #pts{immutable=true}=S) ->
-   try
-      Uid = key_to_uid(Key, S#pts.keylen),
-      undefined = pns:whereis(S#pts.name, Uid),
-      {ok, Entity} = supervisor:start_child(S#pts.factory, [S#pts.name, Uid]),
-      erlang:send(Entity, {put, Tx, Key, Val}),
-      ok
-   catch _:Reason ->
-      error_logger:error_report([{pts, S#pts.name}, {error, Reason} | erlang:get_stacktrace()]),
-      {error, immutable}
+%% send message to process
+send_msg_to_key(Key, Msg, #pts{rthrough=true}=S) ->
+   Uid = key_to_uid(Key, S#pts.keylen),
+   case pns:whereis(S#pts.name, Uid) of
+      undefined ->
+         {ok, Pid} = supervisor:start_child(S#pts.factory, [S#pts.name, Uid]),
+         erlang:send(Pid, Msg), 
+         ok;
+      Pid       -> 
+         erlang:send(Pid, Msg), 
+         ok
    end;
 
-proc_put({put, Tx, Key, Val}, S) ->
-   try
-      Uid = key_to_uid(Key, S#pts.keylen), 
-      {ok, Entity} = case pns:whereis(S#pts.name, Uid) of
-         undefined -> supervisor:start_child(S#pts.factory, [S#pts.name, Uid]);
-         Pid       -> {ok, Pid}
-      end,
-      erlang:send(Entity, {put, Tx, Key, Val}),
-      ok
-   catch _:Reason ->
-      error_logger:error_report([{pts, S#pts.name}, {error, Reason} | erlang:get_stacktrace()]),
-      {error, Reason}
+send_msg_to_key(Key, Msg, S) ->
+   Uid = key_to_uid(Key, S#pts.keylen),
+   case pns:whereis(S#pts.name, Uid) of
+      undefined -> 
+         {error, not_found};
+      Pid    -> 
+         erlang:send(Pid, Msg), 
+         ok
    end.
-
-%%
-%%
-proc_get({get, Tx, Key}, #pts{rthrough=true}=S) ->
-   try
-      Uid = key_to_uid(Key, S#pts.keylen), 
-      {ok, Entity} = case pns:whereis(S#pts.name, Uid) of
-         undefined -> supervisor:start_child(S#pts.factory, [S#pts.name, Uid]);
-         Pid       -> {ok, Pid}
-      end,
-      erlang:send(Entity, {get, Tx, Key}),
-      ok
-   catch _:Reason ->
-      error_logger:error_report([{pts, S#pts.name}, {error, Reason} | erlang:get_stacktrace()]),
-      {error, Reason}
-   end;
-
-proc_get({get, Tx, Key}, S) ->
-   try
-      Uid = key_to_uid(Key, S#pts.keylen),
-      case pns:whereis(S#pts.name, Uid) of
-         undefined -> 
-            {error, not_found};
-         Entity    -> 
-            erlang:send(Entity, {get, Tx, Key}),
-            ok
-      end
-   catch _:Reason ->
-      error_logger:error_report([{pts, S#pts.name}, {error, Reason} | erlang:get_stacktrace()]),
-      {error, Reason}
-   end.
-
-%%
-%%
-proc_remove({remove, _Tx, _Key}, #pts{readonly=true}) ->
-   {error, readonly};
-
-proc_remove({remove, Tx, Key}, S) ->
-   try
-      Uid = key_to_uid(Key, S#pts.keylen),
-      case pns:whereis(S#pts.name, Uid) of
-         undefined -> pts:ack(Tx, ok);
-         Entity    -> erlang:send(Entity, {remove, Tx, Key})
-      end,
-      {noreply, S}
-   catch _:Reason ->
-      error_logger:error_report([{pts, S#pts.name}, {error, Reason} | erlang:get_stacktrace()]),
-      {error, Reason}
-   end.
-
-%%
-%%
-proc_send({send, Key, Msg}, #pts{rthrough=true}=S) ->
-   try
-      Uid = key_to_uid(Key, S#pts.keylen), 
-      {ok, Entity} = case pns:whereis(S#pts.name, Uid) of
-         undefined -> supervisor:start_child(S#pts.factory, [S#pts.name, Uid]);
-         Pid       -> {ok, Pid}
-      end,
-      erlang:send(Entity, Msg),
-      ok
-   catch _:Reason ->
-      error_logger:error_report([{pts, S#pts.name}, {error, Reason} | erlang:get_stacktrace()]),
-      {error, Reason}
-   end;
-
-proc_send({send, Key, Msg}, S) ->
-   try
-      Uid = key_to_uid(Key, S#pts.keylen),
-      case pns:whereis(S#pts.name, Uid) of
-         undefined -> 
-            {error, not_found};
-         Entity    -> 
-            erlang:send(Entity, Msg),
-            ok
-      end
-   catch _:Reason ->
-      error_logger:error_report([{pts, S#pts.name}, {error, Reason} | erlang:get_stacktrace()]),
-      {error, Reason}
-   end.
-
 
 %% transforms key to unique process identifier   
 key_to_uid(Key, inf) ->

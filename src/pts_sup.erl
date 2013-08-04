@@ -18,7 +18,7 @@
 %%
 -module(pts_sup).
 -behaviour(supervisor).
--author(dmkolesnikov@gmail.com).
+-author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([
    start_link/0,
@@ -34,14 +34,8 @@ init([]) ->
    {ok,
       {
          {one_for_one, 2, 60},
-         [pns()]
+         []
       }
    }.
 
-pns() ->
-   {
-      pns,
-      {pns, start_link, []},
-      permanent, 10000, worker, dynamic
-   }.
 
