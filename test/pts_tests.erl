@@ -59,7 +59,7 @@ call_test() ->
 
 cast_test() ->
    ok = pts:put(test, {a, 1}, <<"val">>),
-   ok = pts:cast(test, {a, 1}, {ttl, 30000}),
+   _  = pts:cast(test, {a, 1}, {ttl, 30000}),
    {ok, 30000} = pts:call(test, {a, 1}, ttl),
    ok = pts:remove(test, {a, 1}).
 

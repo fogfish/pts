@@ -58,7 +58,7 @@ terminate(_Reason, #srv{ns=Ns, uid=Uid}) ->
 
 %%
 %%
-handle_call({ttl, TTL}, _Tx, S) ->
+handle_call({ttl, TTL}, Tx, S) ->
    {reply, ok, S#srv{ttl = TTL}, TTL};
 
 handle_call(ttl, _Tx, #srv{ttl=TTL}=S) ->

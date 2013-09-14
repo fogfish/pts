@@ -150,7 +150,7 @@ get_(Ns, Key, true) ->
    plib:cast(Ns, get, Key);
 
 get_(Ns, Key, false) ->
-   plib:send(Ns, put, Key).
+   plib:send(Ns, get, Key).
 
 %%
 %% synchronous remove value
@@ -178,24 +178,26 @@ remove_(Ns, Key, false) ->
    plib:send(Ns, remove, Key).
 
 %%
-%% 
+%% process call
 -spec(call/3 :: (atom(), any(), any()) -> any()).
 -spec(call/4 :: (atom(), any(), any(), timeout()) -> any()).
 
 call(Ns, Key, Msg) ->
-   gen_server:call(Ns, {call, Key, Msg}).
+   call(Ns, Key, Msg, ?DEF_TIMEOUT).
 
 call(Ns, Key, Msg, Timeout) ->
-   gen_server:call(Ns, {call, Key, Msg}, Timeout).
+   % sync call uses plib protocol but otp gen_call is simulated
+   % it allows plib relay to delivery otp complaint request to 
+   % destination process
+   plib:call(Ns, '$gen_call', {Key, Msg}, Timeout).
 
 %%
-%%
+%% process cast
 -spec(cast/3 :: (atom(), any(), any()) -> ok).
 
 cast(Ns, Key, Msg) ->
-   gen_server:cast(Ns, {cast, Key, Msg}).
-
-
+   % uses plib complaint cast notation
+   plib:cast(Ns, '$gen_call', {Key, Msg}).
 
 %%
 %% map function Fun({Key, Pid}) over name space

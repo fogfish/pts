@@ -87,11 +87,12 @@ handle_call({whereis, Key}, _Tx, S) ->
    Uid = key_to_uid(Key, S#pts.keylen),
    {reply, pns:whereis(S#pts.name, Uid), S};
 
-handle_call({call, Key, Req}, Tx, S) ->
+handle_call({Key, Req}, Tx, S) ->
    ?DEBUG("pts call: bucket ~p key ~p req ~p", [S#pts.name, Key, Req]),
-   case (catch send_msg_to_key(Key, {'$gen_call', Tx, Req}, S)) of
+   case (catch send_msg_to_key(Tx, Key, Req, S)) of
       {error, Reason} ->
-         {reply, {error, Reason}, S};
+         plib:ack({error, Reason}),
+         {noreply, S};
       _ ->
          {noreply, S}
    end;
@@ -101,10 +102,6 @@ handle_call(_, _Tx, S) ->
 
 %%
 %%
-handle_cast({cast, Key, Req}, S) ->
-   (catch send_msg_to_key(Key, {'$gen_cast', Req}, S)),
-   {noreply, S};
-
 handle_cast(_, S) ->
    {noreply, S}.
 
@@ -210,25 +207,25 @@ code_change(_OldVsn, S, _Extra) ->
 
 %%
 %% send message to process
-send_msg_to_key(Key, Msg, #pts{rthrough=true}=S) ->
+send_msg_to_key(Tx, Key, Msg, #pts{rthrough=true}=S) ->
    Uid = key_to_uid(Key, S#pts.keylen),
    case pns:whereis(S#pts.name, Uid) of
       undefined ->
          {ok, Pid} = supervisor:start_child(S#pts.factory, [S#pts.name, Uid]),
-         erlang:send(Pid, Msg), 
+         plib:relay(Pid, '$gen_call', Tx, Msg),
          ok;
       Pid       -> 
-         erlang:send(Pid, Msg), 
+         plib:relay(Pid, '$gen_call', Tx, Msg),
          ok
    end;
 
-send_msg_to_key(Key, Msg, S) ->
+send_msg_to_key(Tx, Key, Msg, S) ->
    Uid = key_to_uid(Key, S#pts.keylen),
    case pns:whereis(S#pts.name, Uid) of
       undefined -> 
          {error, not_found};
       Pid    -> 
-         erlang:send(Pid, Msg), 
+         plib:relay(Pid, '$gen_call', Tx, Msg),
          ok
    end.
 
