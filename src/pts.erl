@@ -189,7 +189,7 @@ call(Ns, Key, Msg, Timeout) ->
    % sync call uses plib protocol but otp gen_call is simulated
    % it allows plib relay to delivery otp complaint request to 
    % destination process
-   plib:call(Ns, '$gen_call', {Key, Msg}, Timeout).
+   plib:call(Ns, call, {Key, Msg}, Timeout).
 
 %%
 %% process cast
@@ -197,7 +197,7 @@ call(Ns, Key, Msg, Timeout) ->
 
 cast(Ns, Key, Msg) ->
    % uses plib complaint cast notation
-   plib:cast(Ns, '$gen_call', {Key, Msg}).
+   plib:cast(Ns, call, {Key, Msg}).
 
 %%
 %% map function Fun({Key, Pid}) over name space

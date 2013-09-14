@@ -87,15 +87,15 @@ handle_call({whereis, Key}, _Tx, S) ->
    Uid = key_to_uid(Key, S#pts.keylen),
    {reply, pns:whereis(S#pts.name, Uid), S};
 
-handle_call({Key, Req}, Tx, S) ->
-   ?DEBUG("pts call: bucket ~p key ~p req ~p", [S#pts.name, Key, Req]),
-   case (catch send_msg_to_key(Tx, Key, Req, S)) of
-      {error, Reason} ->
-         plib:ack({error, Reason}),
-         {noreply, S};
-      _ ->
-         {noreply, S}
-   end;
+% handle_call({Key, Req}, Tx, S) ->
+%    ?DEBUG("pts call: bucket ~p key ~p req ~p", [S#pts.name, Key, Req]),
+%    case (catch send_msg_to_key(Tx, Key, Req, S)) of
+%       {error, Reason} ->
+%          plib:ack({error, Reason}),
+%          {noreply, S};
+%       _ ->
+%          {noreply, S}
+%    end;
 
 handle_call(_, _Tx, S) ->
    {noreply, S}.
@@ -189,6 +189,17 @@ handle_info({remove, Tx, Key}, S) ->
          plib:relay(Pid, remove, Tx, Key),
          {noreply, S}
    end;
+
+handle_info({call, Tx, {Key, Req}}, S) ->
+   ?DEBUG("pts call: bucket ~p key ~p req ~p", [S#pts.name, Key, Req]),
+   case (catch send_msg_to_key(Tx, Key, Req, S)) of
+      {error, Reason} ->
+         plib:ack({error, Reason}),
+         {noreply, S};
+      _ ->
+         {noreply, S}
+   end;
+
 
 handle_info(_, S) ->
    {noreply, S}.
