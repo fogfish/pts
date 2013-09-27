@@ -59,7 +59,7 @@ init(false, Name, Opts) ->
       {
          {one_for_all, 4, 1800}, 
          [
-            ?CHILD(worker, pts_ns, [self(), Name, Opts])
+            ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
            ,?CHILD(supervisor, pts_entity_sup, [sup_type(Opts), Entity])
          ]
       }
@@ -74,6 +74,6 @@ sup_type(Opts) ->
 %%
 %%
 factory(Sup) ->
-   {_, Pid, _, _} = lists:keyfind(factory, 1, supervisor:which_children(Sup)),
+   {_, Pid, _, _} = lists:keyfind(pts_entity_sup, 1, supervisor:which_children(Sup)),
    {ok, Pid}.
 
