@@ -31,33 +31,38 @@
 ]).
 
 %%
+-define(CHILD(Type, I),            {I,  {I, start_link,   []}, permanent, 30000, Type, dynamic}).
+-define(CHILD(Type, I, Args),      {I,  {I, start_link, Args}, permanent, 30000, Type, dynamic}).
+-define(CHILD(Type, ID, I, Args),  {ID, {I, start_link, Args}, permanent, 30000, Type, dynamic}).
+
+%%
 %%
 start_link(Name, Opts) ->
    supervisor:start_link(?MODULE, [Name, Opts]).
    
-init([Name, Opts]) -> 
+init([Name, Opts]) ->       
+   init(lists:member(nofactory, Opts), Name, Opts).
+
+init(true, Name, Opts) ->
    {ok,
       {
          {one_for_all, 4, 1800}, 
-         [ns_spec(Name, Opts), factory_spec(Name, Opts)]
+         [
+            ?CHILD(worker, pts_ns, [self(), Name, [readonly|Opts]])
+         ]
       }
-   }.
+   };
 
-%% name space leader
-ns_spec(Name, Opts) ->
-   {
-      ns,
-      {pts_ns, start_link, [self(), Name, Opts]},
-      permanent, 60000, worker, dynamic
-   }.
-
-%% name space factory
-factory_spec(_, Opts) ->
+init(false, Name, Opts) ->
    {entity, Entity} = lists:keyfind(entity, 1, Opts),
-   {
-      factory,
-      {pts_entity_sup, start_link, [sup_type(Opts), Entity]},
-      permanent, 30000, supervisor, dynamic
+   {ok,
+      {
+         {one_for_all, 4, 1800}, 
+         [
+            ?CHILD(worker, pts_ns, [self(), Name, Opts])
+           ,?CHILD(supervisor, pts_entity_sup, [sup_type(Opts), Entity])
+         ]
+      }
    }.
 
 sup_type(Opts) ->
@@ -65,7 +70,6 @@ sup_type(Opts) ->
       false     -> transient;
       {_, Type} -> Type
    end.
-
 
 %%
 %%

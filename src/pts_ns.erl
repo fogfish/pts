@@ -42,6 +42,7 @@
    readonly  = false :: boolean(),       % write operations are disabled
    rthrough  = false :: boolean(),       % read-through
    immutable = false :: boolean(),       % write-once (written value cannot be changed)
+   nofactory = false :: boolean(),       % objects are created outside of pts (e.g. by application)
    entity            :: any()            % entity specification (for accounting only)
 }).
 
@@ -62,6 +63,9 @@ init([readonly | Opts],  S) ->
 
 init([immutable | Opts], S) ->
    init(Opts, S#pts{immutable=true});
+
+init([nofactory | Opts], S) ->
+   init(Opts, S#pts{nofactory=true});
 
 init(['read-through' | Opts], S) ->
    init(Opts, S#pts{rthrough=true});
@@ -107,6 +111,9 @@ handle_cast(_, S) ->
 
 %%
 %%
+handle_info({set_factory, _Sup}, #pts{nofactory=true}=S) ->
+   {noreply, S};
+
 handle_info({set_factory, Sup}, S) ->
    {ok, Pid} = pts_ns_sup:factory(Sup),
    {noreply, S#pts{factory = Pid}};

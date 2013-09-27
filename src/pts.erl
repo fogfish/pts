@@ -73,6 +73,7 @@ start() ->
 %%   'read-through'
 %%   {entity, mfa()}
 %%   supervisor
+%%   nofactory
 -spec(start_link/2 :: (pts(), list()) -> {ok, pid()} | {error, any()}).
 
 start_link(Name, Opts) ->
