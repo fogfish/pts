@@ -201,7 +201,7 @@ handle_info({call, Tx, {Key, Req}}, S) ->
    ?DEBUG("pts call: bucket ~p key ~p req ~p", [S#pts.name, Key, Req]),
    case (catch send_msg_to_key(Tx, Key, Req, S)) of
       {error, Reason} ->
-         plib:ack({error, Reason}),
+         plib:ack(Tx, {error, Reason}),
          {noreply, S};
       _ ->
          {noreply, S}

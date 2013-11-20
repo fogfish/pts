@@ -27,7 +27,7 @@ new(_Id) ->
       lager:set_loglevel(lager_console_backend, basho_bench_config:get(log_level, info)),
       init()
    catch _:Err ->
-      lager:error("mets failed: ~p", [Err]),
+      lager:error("pts failed: ~p", [Err]),
       halt(1)
    end,
    Timeout = basho_bench_config:get(timeout, 30000),
