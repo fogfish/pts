@@ -91,6 +91,17 @@ handle_call({whereis, Key}, _Tx, S) ->
    Uid = key_to_uid(Key, S#pts.keylen),
    {reply, pns:whereis(S#pts.name, Uid), S};
 
+handle_call({ensure, Key}, _Tx, S) ->
+   Uid = key_to_uid(Key, S#pts.keylen),
+   case pns:whereis(S#pts.name, Uid) of
+      undefined ->
+         {ok, Pid} = supervisor:start_child(S#pts.factory, [S#pts.name, Uid]),
+         {reply, Pid, S};
+      Pid       ->
+         {reply, Pid, S}
+   end;
+
+
 % handle_call({Key, Req}, Tx, S) ->
 %    ?DEBUG("pts call: bucket ~p key ~p req ~p", [S#pts.name, Key, Req]),
 %    case (catch send_msg_to_key(Tx, Key, Req, S)) of

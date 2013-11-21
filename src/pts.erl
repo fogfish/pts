@@ -30,6 +30,7 @@
    i/1, 
    i/2,
    whereis/2,
+   ensure/2,
    % put key-val to bucket
    put/3, 
    put/4, 
@@ -101,6 +102,13 @@ i(Prop, Ns) ->
 
 whereis(Ns, Key) ->
    gen_server:call(Ns, {whereis, Key}).
+
+%%
+%% ensure that process is exists and returns its pid()
+-spec(ensure/2 :: (pts(), key()) -> pid()).
+
+ensure(Ns, Key) ->
+   gen_server:call(Ns, {ensure, Key}).
 
 
 %%
