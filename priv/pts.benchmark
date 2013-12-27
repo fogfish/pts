@@ -1,4 +1,8 @@
-{code_paths, ["./ebin"]}.
+{code_paths, [
+   "./ebin"
+  ,"./deps/plib"
+  ,"./deps/pns"
+ ]}.
 {log_level,  info}.
 {report_interval, 1}.
 {driver,     pts_benchmark}.

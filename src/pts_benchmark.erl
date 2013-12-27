@@ -67,7 +67,7 @@ run(remove, KeyGen, _ValueGen, S) ->
 %%
 %%
 init() ->
-   case application:start(pts) of
+   case pts:start() of
       {error, {already_started, _}} ->
          ok;
       ok ->
@@ -81,8 +81,6 @@ init() ->
 %%
 %%
 failure(Tag, _Key, E) ->
-   %io:format("----> ~p~n", [process_info(pns:whereis(kv, Key))]),
-   io:format("~s -> ~p~n", [Tag, E]),
    failed.
 
 
