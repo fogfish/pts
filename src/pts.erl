@@ -136,7 +136,14 @@ put(Ns, Key, Val) ->
 put(#pts{}=Ns, Key, Val, Timeout) ->
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         pipe:call(Pid, {put, Key, Val}, Timeout);
+         case (catch pipe:call(Pid, {put, Key, Val}, Timeout)) of
+            {'EXIT', noproc} -> 
+               {error, not_found};
+            {'EXIT', normal} ->
+               {error, not_found};
+            Result           ->
+               Result            
+         end;
       Error     ->
          Error
    end;
@@ -179,7 +186,14 @@ get(Ns, Key) ->
 get(#pts{}=Ns, Key, Timeout) ->
    case where_to_read(Ns, Key) of
       {ok, Pid} ->
-         pipe:call(Pid, {get, Key}, Timeout);
+         case (catch pipe:call(Pid, {get, Key}, Timeout)) of
+            {'EXIT', noproc} -> 
+               {error, not_found};
+            {'EXIT', normal} ->
+               {error, not_found};
+            Result           ->
+               Result            
+         end;
       Error     ->
          Error
    end;
@@ -222,7 +236,14 @@ remove(Ns, Key) ->
 remove(#pts{}=Ns, Key, Timeout) ->   
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         pipe:call(Pid, {remove, Key}, Timeout);
+         case (catch pipe:call(Pid, {remove, Key}, Timeout)) of
+            {'EXIT', noproc} -> 
+               {error, not_found};
+            {'EXIT', normal} ->
+               {error, not_found};
+            Result           ->
+               Result            
+         end;      
       Error     ->
          Error
    end;
