@@ -1,21 +1,13 @@
 {application, pts,
    [
       {description, "process term storage"},
-      {vsn, "2.1.0"},
-      {modules, [
-         pts,
-         pns,
-         pts_cache,
-         pts_entity_sup,
-         pts_ns,
-         pts_ns_sup,
-         pts_sup,
-         pts_app
-      ]},
+      {vsn, "3.0.0"},
+      {modules,    []},
       {registered, []},
       {applications, [
          kernel,
          stdlib,
+         pipe,
          pns
       ]},
       {mod, {pts_app, []}},

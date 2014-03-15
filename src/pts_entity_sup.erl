@@ -22,36 +22,43 @@
 -behaviour(supervisor).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
-
 -export([
    start_link/2, 
    init/1
 ]).
 
-start_link(Type, Spec) ->
-   supervisor:start_link(?MODULE, [Type, Spec]).
+%%
+-define(CHILD(R, M),        {M, {M, start_link, []}, R, 30000, worker, dynamic}).
+-define(CHILD(R, M, A),     {M, {M, start_link,  A}, R, 30000, worker, dynamic}).
+-define(CHILD(R, M, F, A),  {M, {M,          F,  A}, R, 30000, worker, dynamic}).
 
-init([Type, Spec]) ->
+start_link(Recovery, Spec) ->
+   supervisor:start_link(?MODULE, [Recovery, Spec]).
+
+init([Recovery, Spec]) ->
    {ok,
       {
          {simple_one_for_one, 10, 60},
-         [entity(Type,Spec)]
+         child(Recovery, Spec)
       }
    }.
 
+%%-----------------------------------------------------------------------------
+%%
+%% private
+%%
+%%-----------------------------------------------------------------------------
 
-entity(Type, Mod) 
+child(Recovery, Mod)
  when is_atom(Mod) ->
-   {
-      entity, 
-      {Mod, start_link, []},
-      Type, 60000, worker, dynamic
-   };
+   [?CHILD(Recovery, Mod)];
 
-entity(Type, {M, F, A}) ->
-   {
-      entity, 
-      {M, F, A},
-      Type, 60000, worker, dynamic
-   }.
+child(Recovery, {Mod, Args})
+ when is_atom(Mod) ->
+   [?CHILD(Recovery, Mod, Args)];
+
+child(Recovery, {M, F, A}) ->
+   [?CHILD(Recovery, M, F, A)].
+
+
 

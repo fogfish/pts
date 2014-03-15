@@ -25,9 +25,8 @@
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([
-   start_link/2, 
-   init/1,
-   factory/1
+   start_link/2
+  ,init/1
 ]).
 
 %%
@@ -41,39 +40,48 @@ start_link(Name, Opts) ->
    supervisor:start_link(?MODULE, [Name, Opts]).
    
 init([Name, Opts]) ->       
-   init(lists:member(nofactory, Opts), Name, Opts).
+   init(Name, Opts).
 
-init(true, Name, Opts) ->
+init(Name, Opts) ->
    {ok,
       {
          {one_for_all, 4, 1800}, 
-         [
-            ?CHILD(worker, pts_ns, [self(), Name, [readonly|Opts]])
-         ]
-      }
-   };
-
-init(false, Name, Opts) ->
-   {entity, Entity} = lists:keyfind(entity, 1, Opts),
-   {ok,
-      {
-         {one_for_all, 4, 1800}, 
-         [
-            ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
-           ,?CHILD(supervisor, pts_entity_sup, [sup_type(Opts), Entity])
-         ]
+         child(lists:keyfind(factory, 1, Opts), Name, Opts)
       }
    }.
 
-sup_type(Opts) ->
-   case lists:keyfind(supervisor, 1, Opts) of
-      false     -> transient;
-      {_, Type} -> Type
-   end.
+%%-----------------------------------------------------------------------------
+%%
+%% private
+%%
+%%-----------------------------------------------------------------------------
 
 %%
-%%
-factory(Sup) ->
-   {_, Pid, _, _} = lists:keyfind(pts_entity_sup, 1, supervisor:which_children(Sup)),
-   {ok, Pid}.
+%% create list of child
+child({_, transient}, Name, Opts) ->
+   {entity, Entity} = lists:keyfind(entity, 1, Opts),
+   [
+      ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
+     ,?CHILD(supervisor, pts_entity_sup, [transient, Entity])
+   ];
 
+child({_, temporary}, Name, Opts) ->
+   {entity, Entity} = lists:keyfind(entity, 1, Opts),
+   [
+      ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
+     ,?CHILD(supervisor, pts_entity_sup, [temporary, Entity])
+   ];
+
+child({_, permanent}, Name, Opts) ->
+   {entity, Entity} = lists:keyfind(entity, 1, Opts),
+   [
+      ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
+     ,?CHILD(supervisor, pts_entity_sup, [permanent, Entity])
+   ];
+
+child(_, Name, Opts) ->
+   %% factory type is not defined 
+   [
+      ?CHILD(worker, pts_ns, [self(), Name, Opts])
+   ].
+   

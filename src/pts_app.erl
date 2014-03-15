@@ -19,10 +19,12 @@
 -module(pts_app).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
+-include("pts.hrl").
+
 -export([start/2, stop/1]).
 
-
 start(_Type, _Args) ->
+   _ = ets:new(pts, ?CONFIG_REGISTRY),
    pts_sup:start_link().
    
 stop(_S) ->

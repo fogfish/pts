@@ -49,7 +49,12 @@ start_link(TTL, Ns, Uid) ->
   gen_server:start_link(?MODULE, [TTL, Ns, Uid], []).
   
 init([TTL, Ns, Uid]) ->
-   pns:register(Ns, Uid),
+   case pns:whereis(Ns, Uid) of
+      undefined ->
+   pns:register(Ns, Uid, self());
+      _ ->
+         exit(ffffuuuuukkkkk)
+   end,
    {ok, #srv{ns=Ns, uid=Uid, ttl=TTL}}.
   
 terminate(_Reason, #srv{ns=Ns, uid=Uid}) ->
@@ -58,45 +63,48 @@ terminate(_Reason, #srv{ns=Ns, uid=Uid}) ->
 
 %%
 %%
-handle_call({ttl, TTL}, Tx, S) ->
-   {reply, ok, S#srv{ttl = TTL}, TTL};
-
-handle_call(ttl, _Tx, #srv{ttl=TTL}=S) ->
-   {reply, {ok, TTL}, S, TTL};
-
-handle_call(_, _Tx, #srv{ttl=TTL}=S) ->
-   {noreply, S, TTL}.
+handle_call(Msg, _Tx, #srv{}=S) ->
+   error_logger:error_report([{unexpected, Msg}]),
+   {noreply, S, S#srv.ttl}.
 
 %%
 %%
-handle_cast({ttl, TTL}, S) ->
-   {noreply, S#srv{ttl = TTL}, TTL};
-
-handle_cast(_, #srv{ttl=TTL}=S) ->
-   {noreply, S, TTL}.
+handle_cast(Msg, #srv{}=S) ->
+   error_logger:error_report([{unexpected, Msg}]),
+   {noreply, S, S#srv.ttl}.
 
 %%
-%%
-handle_info({put, Tx, {Key, Val}}, #srv{ttl=TTL}=S) ->
-   plib:ack(Tx, ok),
-   {noreply, S#srv{key=Key, val=Val}, TTL};
+handle_info({'$pipe', Tx, {put, Key, Val}}, S) ->
+   pipe:ack(Tx, ok),
+   {noreply, S#srv{key=Key, val=Val}, S#srv.ttl};
 
-handle_info({get, Tx, _Key}, #srv{ttl=TTL, val=Val}=S) ->
-   plib:ack(Tx, Val),
-   {noreply, S, TTL};
+handle_info({'$pipe', Tx, {get, _Key}}, S) ->
+   pipe:ack(Tx, S#srv.val),
+   {noreply, S, S#srv.ttl};
 
-handle_info({remove, Tx, _Key}, #srv{ns=Ns, uid=Uid}=S) ->
-   plib:ack(Tx, ok),
-   {stop, normal, S#srv{val=undefined}};
+handle_info({'$pipe', Tx, {remove, _Key}}, S) ->
+   pipe:ack(Tx, ok),
+   {stop, normal, S};
 
-handle_info({ttl, TTL}, S) ->
-   {noreply, S#srv{ttl = TTL}, TTL};
+handle_info({'$pipe', Tx, {ttl, TTL}}, S) ->
+   pipe:ack(Tx, ok),
+   {noreply, S#srv{ttl=TTL}, TTL};
+
+handle_info({'$pipe', Tx, ttl}, S) ->
+   pipe:ack(Tx, {ok, S#srv.ttl}),
+   {noreply, S, S#srv.ttl};
 
 handle_info(timeout, S) ->
-   {stop, normal, S}.
+   {stop, normal, S};
+
+handle_info(Msg, S) ->
+   error_logger:error_report([{unexpected, Msg}]),
+   {noreply, S, S#srv.ttl}.
 
 %%
 %%
 code_change(_OldVsn, State, _Extra) ->
    {ok, State}.     
+
+
 

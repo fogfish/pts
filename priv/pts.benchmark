@@ -1,6 +1,6 @@
 {code_paths, [
    "./ebin"
-  ,"./deps/plib"
+  ,"./deps/pipe"
   ,"./deps/pns"
  ]}.
 {log_level,  info}.

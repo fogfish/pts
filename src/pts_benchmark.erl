@@ -74,13 +74,15 @@ init() ->
          TTL     = basho_bench_config:get(ttl, 30000),
          {ok, _} = pts:start_link(kv, [
             'read-through',
-            {entity, {pts_cache, start_link, [TTL]}}
+            {factory, temporary},
+            {entity,  {pts_cache, start_link, [TTL]}}
          ])
    end.
 
 %%
 %%
-failure(Tag, _Key, E) ->
+failure(Tag, Key, E) ->
+   % io:format("-> ~p ~p ~p ~n", [Tag, Key, E]),
    failed.
 
 
