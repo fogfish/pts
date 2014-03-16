@@ -45,7 +45,7 @@ init([Name, Opts]) ->
 init(Name, Opts) ->
    {ok,
       {
-         {one_for_all, 4, 1800}, 
+         {one_for_one, 4, 1800}, 
          child(lists:keyfind(factory, 1, Opts), Name, Opts)
       }
    }.

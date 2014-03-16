@@ -153,7 +153,7 @@ put(Ns, Key, Val, Timeout) ->
 %%
 %% asynchronous put value
 -spec(put_/3 :: (pts()|pid(), key(), val()) -> reference()).
--spec(put_/4 :: (pts()|pid(), key(), val(), boolean()) -> reference()).
+-spec(put_/4 :: (pts()|pid(), key(), val(), boolean()) -> ok | reference()).
 
 put_(Ns, Key, Val) ->
    pts:put_(Ns, Key, Val, true).
@@ -202,8 +202,8 @@ get(Ns, Key, Timeout) ->
 
 %%
 %% asynchronous get value
--spec(get_/2 :: (atom(), any()) -> reference() | {error, any()}).
--spec(get_/3 :: (atom(), any(), boolean()) -> ok | reference() | {error, any()}).
+-spec(get_/2 :: (atom(), any()) -> reference()).
+-spec(get_/3 :: (atom(), any(), boolean()) -> ok | reference()).
 
 get_(Ns, Key) ->
    pts:get_(Ns, Key, true).
@@ -252,8 +252,8 @@ remove(Ns, Key, Timeout) ->
 
 %%
 %% asynchronous remove value
--spec(remove_/2 :: (atom(), any()) -> reference() | {error, any()}).
--spec(remove_/3 :: (atom(), any(),boolean()) -> ok | reference() | {error, any()}).
+-spec(remove_/2 :: (atom(), any()) -> reference()).
+-spec(remove_/3 :: (atom(), any(),boolean()) -> ok | reference()).
 
 remove_(Ns, Key) ->
    pts:remove_(Ns, Key, true).
