@@ -42,6 +42,10 @@ init([Sup, Name, Opts]) ->
    self() ! {set_factory, Sup}, % message to itself, to avoid supervisor deadlock
    {ok, init(Opts, #pts{name=Name})}.
 
+init([{global, X} | Opts], S) ->
+   pg2:create(X),
+   init(Opts, S#pts{global=X}); 
+
 init([{keylen, X} | Opts], S) ->
    init(Opts, S#pts{keylen=X}); 
 
@@ -71,13 +75,27 @@ terminate(_, _) ->
 handle_call({ensure, Key}, _Tx, #pts{factory=undefined}=S) ->
    {reply, {error, readonly}, S};
 
-handle_call({ensure, Key}, _Tx, S) ->
+handle_call({ensure, Key}, _Tx, #pts{global=undefined}=S) ->
    case pts:whereis(S, Key) of
       undefined ->
          Result = supervisor:start_child(S#pts.factory, 
             [S#pts.name, key_to_uid(Key, S#pts.keylen)]
          ),
          {reply, Result, S};
+      Pid ->
+         {reply, {ok, Pid}, S}
+   end;
+
+handle_call({ensure, Key}, _Tx, #pts{global=Group}=S) ->
+   case pts:whereis(S, Key) of
+      undefined ->
+         case supervisor:start_child(S#pts.factory, [S#pts.name, key_to_uid(Key, S#pts.keylen)]) of
+            {ok, Pid} ->
+               pg2:join(Group, Pid),
+               {reply, {ok, Pid}, S};
+            Error ->
+               Error
+         end;
       Pid ->
          {reply, {ok, Pid}, S}
    end;
@@ -96,10 +114,10 @@ handle_info({set_factory, Sup}, S) ->
    Childs = supervisor:which_children(Sup),
    case lists:keyfind(pts_entity_sup, 1, Childs) of
       false ->
-         true = ets:insert_new(pts, S),
+         _ = ets:insert(pts, S),
          {noreply, S};
       {pts_entity_sup, Pid, _, _} ->
-         true = ets:insert_new(pts, S#pts{factory = Pid}),
+         _ = ets:insert(pts, S#pts{factory = Pid}),
          {noreply, S#pts{factory = Pid}}
    end;
 
