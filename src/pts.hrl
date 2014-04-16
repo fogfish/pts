@@ -25,7 +25,6 @@
 -record(pts, {
    name              :: atom(),          % unique name-space id
    factory           :: pid(),           % process factory or undefined
-   global    = undefined :: atom(),      % process group is global
    keylen    = inf   :: integer() | inf, % length of key (key prefix used to distinguish a process)
    readonly  = false :: boolean(),       % write operations are disabled
    rthrough  = false :: boolean(),       % read-through

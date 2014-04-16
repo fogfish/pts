@@ -49,12 +49,7 @@ start_link(TTL, Ns, Uid) ->
   gen_server:start_link(?MODULE, [TTL, Ns, Uid], []).
   
 init([TTL, Ns, Uid]) ->
-   case pns:whereis(Ns, Uid) of
-      undefined ->
-   pns:register(Ns, Uid, self());
-      _ ->
-         exit(ffffuuuuukkkkk)
-   end,
+   pns:register(Ns, Uid, self()),
    {ok, #srv{ns=Ns, uid=Uid, ttl=TTL}}.
   
 terminate(_Reason, #srv{ns=Ns, uid=Uid}) ->
