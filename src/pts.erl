@@ -70,13 +70,14 @@ start() ->
 %% start new bucket
 %% Options:
 %%   {keylen,  integer()} - length of key prefix 
-%%   readonly             - only read operations is allowed
+%%   readonly             - only read operations are restricted (no writes)
 %%   immutable            - any existed value cannot be replaced 
 %%   'read-through'       - read operation creates process instance if it is not exists
 %%   {entity,        ...} - defines entity container (used along with factory)
 %%   {factory,    atom()} - defines recovery strategy for entity processes, 
 %%                          processes are created out-side of pts supervisor by application
 %%                          if factory is not defined.
+%%   {protocol, pipe | server} - define ipc protocol (default pipe)
 -spec(start_link/2 :: (pts(), list()) -> {ok, pid()} | {error, any()}).
 
 start_link(Name, Opts) ->
@@ -136,7 +137,7 @@ put(Ns, Key, Val) ->
 put(#pts{}=Ns, Key, Val, Timeout) ->
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         case (catch pipe:call(Pid, {put, Key, Val}, Timeout)) of
+         case (catch pcall(Ns#pts.protocol, Pid, {put, Key, Val}, Timeout)) of
             {'EXIT', noproc} -> 
                {error, not_found};
             {'EXIT', normal} ->
@@ -161,14 +162,14 @@ put_(Ns, Key, Val) ->
 put_(#pts{}=Ns, Key, Val,  true) ->
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         pipe:cast(Pid, {put, Key, Val});
+         pcast(Ns#pts.protocol, Pid, {put, Key, Val});
       Error     ->
          Error
    end;
 put_(#pts{}=Ns, Key, Val, false) ->
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         pipe:send(Pid, {put, Key, Val}), ok;
+         psend(Ns#pts.protocol, Pid, {put, Key, Val}), ok;
       Error     ->
          Error
    end;
@@ -186,7 +187,7 @@ get(Ns, Key) ->
 get(#pts{}=Ns, Key, Timeout) ->
    case where_to_read(Ns, Key) of
       {ok, Pid} ->
-         case (catch pipe:call(Pid, {get, Key}, Timeout)) of
+         case (catch pcall(Ns#pts.protocol, Pid, {get, Key}, Timeout)) of
             {'EXIT', noproc} -> 
                {error, not_found};
             {'EXIT', normal} ->
@@ -211,14 +212,14 @@ get_(Ns, Key) ->
 get_(#pts{}=Ns, Key, true) ->
    case where_to_read(Ns, Key) of
       {ok, Pid} ->
-         pipe:cast(Pid, {get, Key});
+         pcast(Ns#pts.protocol, Pid, {get, Key});
       Error     ->
          Error
    end;
 get_(#pts{}=Ns, Key, false) ->
    case where_to_read(Ns, Key) of
       {ok, Pid} ->
-         pipe:send(Pid, {get, Key}), ok;
+         psend(Ns#pts.protocol, Pid, {get, Key}), ok;
       Error     ->
          Error
    end;
@@ -236,7 +237,7 @@ remove(Ns, Key) ->
 remove(#pts{}=Ns, Key, Timeout) ->   
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         case (catch pipe:call(Pid, {remove, Key}, Timeout)) of
+         case (catch pcall(Ns#pts.protocol, Pid, {remove, Key}, Timeout)) of
             {'EXIT', noproc} -> 
                {error, not_found};
             {'EXIT', normal} ->
@@ -261,14 +262,14 @@ remove_(Ns, Key) ->
 remove_(#pts{}=Ns, Key, true) ->
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         pipe:cast(Pid, {remove, Key});
+         pcast(Ns#pts.protocol, Pid, {remove, Key});
       Error     ->
          Error
    end;
 remove_(#pts{}=Ns, Key, false) ->
    case where_to_write(Ns, Key) of
       {ok, Pid} ->
-         pipe:send(Pid, {remove, Key}), ok;
+         psend(Ns#pts.protocol, Pid, {remove, Key}), ok;
       Error     ->
          Error
    end;
@@ -286,7 +287,7 @@ call(Ns, Key, Msg) ->
 call(#pts{}=Ns, Key, Msg, Timeout) ->
    case where_to_read(Ns, Key) of
       {ok, Pid} ->
-         pipe:call(Pid, Msg, Timeout);
+         pcall(Ns#pts.protocol, Pid, Msg, Timeout);
       Error     ->
          Error
    end;
@@ -300,7 +301,7 @@ call(Ns, Key, Msg, Timeout) ->
 cast(#pts{}=Ns, Key, Msg) ->
    case where_to_read(Ns, Key) of
       {ok, Pid} ->
-         pipe:cast(Pid, Msg);
+         pcast(Ns#pts.protocol, Pid, Msg);
       Error     ->
          Error
    end;
@@ -314,7 +315,7 @@ cast(Ns, Key, Msg) ->
 send(#pts{}=Ns, Key, Msg) ->
    case where_to_read(Ns, Key) of
       {ok, Pid} ->
-         pipe:send(Pid, Msg);
+         psend(Ns#pts.protocol, Pid, Msg);
       Error     ->
          Error
    end;
@@ -325,15 +326,17 @@ send(Ns, Key, Msg) ->
 %% fold function Fun(Key, $Value, Acc) over name space
 -spec(fold/3 :: (function(), any(), pts()) -> list()).
 
-fold(Fun, Acc0, Ns) ->
+fold(Fun, Acc0, #pts{name=Ns, protocol=Prot}) ->
    pns:fold(
       fun({Key, Pid}, Acc) -> 
-         Fun(Key, fun() -> pipe:call(Pid, {get, Key}, ?DEF_TIMEOUT) end, Acc)
+         Fun(Key, fun() -> pcall(Prot, Pid, {get, Key}, ?DEF_TIMEOUT) end, Acc)
       end, 
       Acc0, 
       Ns
-   ).   
+   );
 
+fold(Fun, Acc0, Ns) ->
+   fold(Fun, Acc0, ns(Ns)).
 
 
 %%-----------------------------------------------------------------------------
@@ -399,6 +402,20 @@ where_to_read(#pts{}=Ns, Key) ->
       Pid       -> {ok, Pid}
    end.
 
+%%
+%%
+pcall(pipe,   Pid, Msg, Timeout) -> 
+   pipe:call(Pid, Msg, Timeout);
+pcall(server, Pid, Msg, Timeout) -> 
+   gen_server:call(Pid, Msg, Timeout).
 
+pcast(pipe, Pid, Msg) ->
+   pipe:cast(Pid, Msg);
+pcast(server, Pid, Msg) ->
+   gen_server:cast(Pid, Msg).
 
+psend(pipe, Pid, Msg) ->
+   pipe:send(Pid, Msg);
+psend(server, Pid, Msg) ->
+   erlang:send(Pid, Msg).
 

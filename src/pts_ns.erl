@@ -54,6 +54,9 @@ init([immutable | Opts], S) ->
 init(['read-through' | Opts], S) ->
    init(Opts, S#pts{rthrough=true});
 
+init([{protocol, X} | Opts], S) ->
+   init(Opts, S#pts{protocol=X});
+
 init([{entity, X} | Opts], S) ->
    init(Opts, S#pts{entity=X});
 

@@ -1,7 +1,7 @@
 {application, pts,
    [
       {description, "process term storage"},
-      {vsn, "3.0.0"},
+      {vsn, "3.1.0"},
       {modules,    []},
       {registered, []},
       {applications, [
