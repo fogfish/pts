@@ -72,10 +72,12 @@ init() ->
          ok;
       ok ->
          TTL     = basho_bench_config:get(ttl, 30000),
+         Capacity= basho_bench_config:get(ttl,   inf),
          {ok, _} = pts:start_link(kv, [
             'read-through',
             {factory, temporary},
-            {entity,  {pts_cache, start_link, [TTL]}}
+            {entity,  {pts_cache, start_link, [TTL]}},
+            {capacity, Capacity}
          ])
    end.
 

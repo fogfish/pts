@@ -33,6 +33,16 @@
    handle_info/2,
    code_change/3
 ]).
+
+%%
+%% internal state
+-record(srv, {
+   storage   = undefined :: #pts{}        
+  ,length    = 0         :: integer()        % queue length 
+  ,queue     = undefined :: any()            % process eviction queue
+}).
+
+
 %%
 %%
 start_link(Sup, Name, Opts) ->
@@ -60,59 +70,67 @@ init([{protocol, X} | Opts], S) ->
 init([{entity, X} | Opts], S) ->
    init(Opts, S#pts{entity=X});
 
+init([{capacity, X} | Opts], S) ->
+   init(Opts, S#pts{capacity=X});
+
 init([_ | Opts], S) ->
    init(Opts, S);
 
 init([], S) ->
-   S.
+   #srv{
+      storage = S
+     ,queue   = queue:new()
+   }.
 
+%%
+%%
 terminate(_, _) ->
    ok.
 
 %%
 %%
-handle_call({ensure, _Key}, _Tx, #pts{factory=undefined}=S) ->
-   {reply, {error, readonly}, S};
+handle_call({ensure, _Key}, _Tx, #srv{storage=#pts{factory=undefined}}=State) ->
+   {reply, {error, readonly}, State};
 
-handle_call({ensure, Key}, _Tx, #pts{}=S) ->
-   case pts:whereis(S, Key) of
+handle_call({ensure, Key}, _Tx, #srv{storage=Storage}=State) ->
+   case pts:whereis(Storage, Key) of
       undefined ->
-         Result = supervisor:start_child(S#pts.factory, 
-            [S#pts.name, key_to_uid(Key, S#pts.keylen)]
+         Result = supervisor:start_child(Storage#pts.factory, 
+            [Storage#pts.name, key_to_uid(Key, Storage#pts.keylen)]
          ),
-         {reply, Result, S};
+         {reply, Result, enq_entity(Result, State)};
       Pid ->
-         {reply, {ok, Pid}, S}
+         {reply, {ok, Pid}, State}
    end;
 
-handle_call(_, _Tx, S) ->
-   {noreply, S}.
+handle_call(_, _Tx, State) ->
+   {noreply, State}.
 
 %%
 %%
-handle_cast(_, S) ->
-   {noreply, S}.
+handle_cast(_, State) ->
+   {noreply, State}.
 
 %%
 %%
-handle_info({set_factory, Sup}, S) ->
+handle_info({set_factory, Sup}, #srv{storage=Storage}=State) ->
    Childs = supervisor:which_children(Sup),
    case lists:keyfind(pts_entity_sup, 1, Childs) of
       false ->
-         _ = ets:insert(pts, S),
-         {noreply, S};
+         _ = ets:insert(pts, Storage),
+         {noreply, State};
       {pts_entity_sup, Pid, _, _} ->
-         _ = ets:insert(pts, S#pts{factory = Pid}),
-         {noreply, S#pts{factory = Pid}}
+         _ = ets:insert(pts, Storage#pts{factory = Pid}),
+         {noreply, State#srv{storage=Storage#pts{factory = Pid}}}
    end;
 
-handle_info(_, S) ->
-   {noreply, S}.
+handle_info(_, State) ->
+   {noreply, State}.
 
 %%
 %%
-code_change(_OldVsn, S, _Extra) ->
-   {ok, S}.     
+code_change(_OldVsn, State, _Extra) ->
+   {ok, State}.     
 
 %%-----------------------------------------------------------------------------
 %%
@@ -141,3 +159,43 @@ key_to_uid(Key, Len)
 
 key_to_uid(Key, _) ->
    Key.
+
+%%
+%% 
+enq_entity({error, _}, State) ->
+   State;
+
+enq_entity({ok, _}, #srv{storage=#pts{capacity=inf}}=State) ->
+   State;
+
+enq_entity({ok, Pid}, #srv{storage=#pts{capacity=C}, length=C}=State) ->
+   {N, Queue} = drop_while(C, State#srv.queue),
+   State#srv{
+      length = N + 1,
+      queue  = queue:in(Pid, Queue)
+   };
+   
+enq_entity({ok, Pid}, #srv{length=Length}=State) ->
+   State#srv{
+      length = Length + 1,
+      queue  = queue:in(Pid, State#srv.queue)
+   }.
+
+%%
+%%
+drop_while(N, Queue0) ->
+   case queue:out(Queue0) of
+      {empty, Queue} ->
+         {0, Queue};
+      {{value, Pid}, Queue} ->
+         case erlang:is_process_alive(Pid) of
+            true  ->
+               erlang:exit(Pid, shutdown),
+               {N - 1, Queue};
+            false ->
+               drop_while(N - 1, Queue)
+         end
+   end.
+
+
+

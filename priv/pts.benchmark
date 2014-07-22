@@ -22,5 +22,6 @@
    {remove, 1} 
 ]}.
 
-{ttl,     30000}.
-{timeout,  5000}.
+{ttl,      30000}.
+{timeout,   5000}.
+{capacity, 20000}.

@@ -122,9 +122,9 @@ whereis(Ns, Key) ->
 -spec(ensure/2 :: (pts(), key()) -> {ok, pid()} | {error, any()}).
 
 ensure(#pts{name=Name}, Key) ->
-   gen_server:call(Name, {ensure, Key}, ?DEF_TIMEOUT);
+   gen_server:call(Name, {ensure, Key}, infinity);
 ensure(Ns, Key) ->
-   gen_server:call(Ns, {ensure, Key}, ?DEF_TIMEOUT).   
+   gen_server:call(Ns, {ensure, Key}, infinity).   
 
 %%
 %% synchronous put value
