@@ -142,6 +142,8 @@ put(#pts{}=Ns, Key, Val, Timeout) ->
                {error, not_found};
             {'EXIT', normal} ->
                {error, not_found};
+            {'EXIT', {error, _}=Reason} ->
+               Reason;
             Result           ->
                Result            
          end;
@@ -192,6 +194,8 @@ get(#pts{}=Ns, Key, Timeout) ->
                {error, not_found};
             {'EXIT', normal} ->
                {error, not_found};
+            {'EXIT', {error, _}=Reason} ->
+               Reason;
             Result           ->
                Result            
          end;
@@ -242,6 +246,8 @@ remove(#pts{}=Ns, Key, Timeout) ->
                {error, not_found};
             {'EXIT', normal} ->
                {error, not_found};
+            {'EXIT', {error, _}=Reason} ->
+               Reason;
             Result           ->
                Result            
          end;      

@@ -190,6 +190,7 @@ drop_while(N, Queue0) ->
       {{value, Pid}, Queue} ->
          case erlang:is_process_alive(Pid) of
             true  ->
+               %% @todo: use free signal (shutdown damages the state) 
                erlang:exit(Pid, shutdown),
                {N - 1, Queue};
             false ->
