@@ -1,0 +1,40 @@
+%% @author     Dmitry Kolesnikov, <dmkolesnikov@gmail.com>
+%% @copyright  (c) 2012 - 2014 Dmitry Kolesnikov. All Rights Reserved
+%%
+%% @description
+%%   customize dependency handling
+DEPS = fun
+   (false,Config) ->
+      Config; 
+   (File, Config) ->
+      case file:consult(File) of
+         {ok, Deps} ->
+            New = lists:filter(
+               fun({Lib, _, _}) ->
+                  case code:lib_dir(Lib) of
+                     {error, bad_name} ->
+                        true;
+                     Path ->
+                        io:format("==> use ~s~n", [Path]),
+                        false
+                  end
+               end,
+               Deps
+            ),
+            {deps, List} = lists:keyfind(deps, 1, Config),
+            lists:keystore(deps, 1, Config, {deps, List ++ New});
+         _ ->
+            Config
+      end 
+end,
+Fdeps = fun(Config) -> DEPS("deps.config",     Config) end, 
+Fenv  = fun(Config) -> DEPS(os:getenv("rel"),  Config) end,
+
+lists:foldl(
+   fun(X, Acc) -> X(Acc) end,
+   CONFIG,
+   [Fdeps, Fenv]
+).
+
+   
+
