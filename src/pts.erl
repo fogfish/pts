@@ -31,6 +31,7 @@
    i/2,
    whereis/2,
    ensure/2,
+   ensure/3,
    % put key-val to bucket
    put/3, 
    put/4, 
@@ -120,11 +121,15 @@ whereis(Ns, Key) ->
 %% ensure process is exists and returns its pid()
 %% process creation is serialized to avoid key collisions
 -spec(ensure/2 :: (pts(), key()) -> {ok, pid()} | {error, any()}).
+-spec(ensure/3 :: (pts(), key(), list()) -> {ok, pid()} | {error, any()}).
 
-ensure(#pts{name=Name}, Key) ->
-   gen_server:call(Name, {ensure, Key}, infinity);
 ensure(Ns, Key) ->
-   gen_server:call(Ns, {ensure, Key}, infinity).   
+   ensure(Ns, Key, []).
+
+ensure(#pts{name=Name}, Key, Args) ->
+   gen_server:call(Name, {ensure, Key, Args}, infinity);
+ensure(Ns, Key, Args) ->
+   gen_server:call(Ns, {ensure, Key, Args}, infinity).   
 
 %%
 %% synchronous put value

@@ -89,14 +89,14 @@ terminate(_, _) ->
 
 %%
 %%
-handle_call({ensure, _Key}, _Tx, #srv{storage=#pts{factory=undefined}}=State) ->
+handle_call({ensure,_Key,_Args}, _Tx, #srv{storage=#pts{factory=undefined}}=State) ->
    {reply, {error, readonly}, State};
 
-handle_call({ensure, Key}, _Tx, #srv{storage=Storage}=State) ->
+handle_call({ensure, Key, Args}, _Tx, #srv{storage=Storage}=State) ->
    case pts:whereis(Storage, Key) of
       undefined ->
          Result = supervisor:start_child(Storage#pts.factory, 
-            [Storage#pts.name, key_to_uid(Key, Storage#pts.keylen)]
+            [Storage#pts.name, key_to_uid(Key, Storage#pts.keylen)] ++ Args
          ),
          {reply, Result, enq_entity(Result, State)};
       Pid ->
