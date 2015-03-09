@@ -56,27 +56,35 @@ init(Name, Opts) ->
 %%
 %%-----------------------------------------------------------------------------
 
+entity(Opts) ->
+   case lists:keyfind(entity, 1, Opts) of
+      false  ->
+         {supervisor, _} = lists:keyfind(supervisor, 1, Opts);
+      {entity, Entity} ->
+         {worker, Entity}
+   end.   
+
 %%
 %% create list of child
 child({_, transient}, Name, Opts) ->
-   {entity, Entity} = lists:keyfind(entity, 1, Opts),
+   {Type, Entity} = entity(Opts),
    [
       ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
-     ,?CHILD(supervisor, pts_entity_sup, [transient, Entity])
+     ,?CHILD(supervisor, pts_entity_sup, [Type, transient, Entity])
    ];
 
 child({_, temporary}, Name, Opts) ->
-   {entity, Entity} = lists:keyfind(entity, 1, Opts),
+   {Type, Entity} = entity(Opts),
    [
       ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
-     ,?CHILD(supervisor, pts_entity_sup, [temporary, Entity])
+     ,?CHILD(supervisor, pts_entity_sup, [Type, temporary, Entity])
    ];
 
 child({_, permanent}, Name, Opts) ->
-   {entity, Entity} = lists:keyfind(entity, 1, Opts),
+   {Type, Entity} = entity(Opts),
    [
       ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
-     ,?CHILD(supervisor, pts_entity_sup, [permanent, Entity])
+     ,?CHILD(supervisor, pts_entity_sup, [Type, permanent, Entity])
    ];
 
 child(_, Name, Opts) ->

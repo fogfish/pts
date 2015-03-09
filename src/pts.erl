@@ -74,7 +74,8 @@ start() ->
 %%   readonly             - only read operations are restricted (no writes)
 %%   immutable            - any existed value cannot be replaced 
 %%   'read-through'       - read operation creates process instance if it is not exists
-%%   {entity,        ...} - defines entity container (used along with factory)
+%%   {entity,        ...} - defines entity (worker) container (used along with factory)
+%%   {supervisor,    ...} - defines entity (supervisor) container (used along with factory)
 %%   {factory,    atom()} - defines recovery strategy for entity processes, 
 %%                          processes are created out-side of pts supervisor by application
 %%                          if factory is not defined.

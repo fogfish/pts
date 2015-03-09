@@ -23,23 +23,23 @@
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([
-   start_link/2, 
+   start_link/3, 
    init/1
 ]).
 
 %%
--define(CHILD(R, M),        {M, {M, start_link, []}, R, 30000, worker, dynamic}).
--define(CHILD(R, M, A),     {M, {M, start_link,  A}, R, 30000, worker, dynamic}).
--define(CHILD(R, M, F, A),  {M, {M,          F,  A}, R, 30000, worker, dynamic}).
+-define(CHILD(T, R, M),        {M, {M, start_link, []}, R, 30000, T, dynamic}).
+-define(CHILD(T, R, M, A),     {M, {M, start_link,  A}, R, 30000, T, dynamic}).
+-define(CHILD(T, R, M, F, A),  {M, {M,          F,  A}, R, 30000, T, dynamic}).
 
-start_link(Recovery, Spec) ->
-   supervisor:start_link(?MODULE, [Recovery, Spec]).
+start_link(Type, Recovery, Spec) ->
+   supervisor:start_link(?MODULE, [Type, Recovery, Spec]).
 
-init([Recovery, Spec]) ->
+init([Type, Recovery, Spec]) ->
    {ok,
       {
          {simple_one_for_one, 10, 60},
-         child(Recovery, Spec)
+         child(Type, Recovery, Spec)
       }
    }.
 
@@ -49,16 +49,16 @@ init([Recovery, Spec]) ->
 %%
 %%-----------------------------------------------------------------------------
 
-child(Recovery, Mod)
+child(Type, Recovery, Mod)
  when is_atom(Mod) ->
-   [?CHILD(Recovery, Mod)];
+   [?CHILD(Type, Recovery, Mod)];
 
-child(Recovery, {Mod, Args})
+child(Type, Recovery, {Mod, Args})
  when is_atom(Mod) ->
-   [?CHILD(Recovery, Mod, Args)];
+   [?CHILD(Type, Recovery, Mod, Args)];
 
-child(Recovery, {M, F, A}) ->
-   [?CHILD(Recovery, M, F, A)].
+child(Type, Recovery, {M, F, A}) ->
+   [?CHILD(Type, Recovery, M, F, A)].
 
 
 
