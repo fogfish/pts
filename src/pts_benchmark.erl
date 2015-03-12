@@ -71,8 +71,8 @@ init() ->
       {error, {already_started, _}} ->
          ok;
       ok ->
-         TTL     = basho_bench_config:get(ttl, 30000),
-         Capacity= basho_bench_config:get(ttl,   inf),
+         TTL     = basho_bench_config:get(ttl,      30000),
+         Capacity= basho_bench_config:get(capacity,   inf),
          {ok, _} = pts:start_link(kv, [
             'read-through',
             {factory, temporary},

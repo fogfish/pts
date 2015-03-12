@@ -113,8 +113,8 @@ i(Prop, Ns) ->
 %% return pid() of processes
 -spec(whereis/2 :: (pts(), key()) -> pid() | undefined).
 
-whereis(#pts{}=Ns, Key) ->
-   pns:whereis(Ns#pts.name, key_to_uid(Key, Ns#pts.keylen));
+whereis(#pts{name=Name, keylen=Keylen}, Key) ->
+   pns:whereis(Name, key_to_uid(Key, Keylen));
 whereis(Ns, Key) ->
    whereis(ns(Ns), Key).
 
@@ -127,10 +127,30 @@ whereis(Ns, Key) ->
 ensure(Ns, Key) ->
    ensure(Ns, Key, []).
 
-ensure(#pts{name=Name}, Key, Args) ->
-   gen_server:call(Name, {ensure, Key, Args}, infinity);
+ensure(#pts{factory=undefined}, _Key, _Args) ->
+   {error, readonly};
+
+ensure(#pts{name=Ns, keylen=Keylen, factory=Sup}=Storage, Key, Args) ->
+   case pts:whereis(Storage, Key) of
+      undefined ->
+         case 
+            supervisor:start_child(Sup, 
+               [Ns, key_to_uid(Key, Keylen)] ++ Args
+            )
+         of
+            {ok, Pid} ->
+               ets:update_counter(pts, Ns, [{#pts.size, 1}]),
+               {ok, Pid};
+            {error, {badarg, {_,_}}} ->
+               ensure(Storage, Key, Args);
+            {error, Reason} ->
+               {error, Reason}
+         end;
+      Pid ->
+         {ok, Pid}
+   end;
 ensure(Ns, Key, Args) ->
-   gen_server:call(Ns, {ensure, Key, Args}, infinity).   
+   ensure(ns(Ns), Key, Args).
 
 %%
 %% synchronous put value

@@ -12,16 +12,15 @@
 {mode,           max}.
 {duration,         1}.
 {concurrent,       10}.
-%{key_generator,   {uniform_int, 1000000}}.
+% {key_generator,   {uniform_int, 1000000}}.
 {key_generator,   {uniform_int, 10000}}.
 {value_generator, {fixed_bin, 10}}.
 
 {operations, [
-   {put,    5}, 
-   {get ,   5},
-   {remove, 1} 
+   {put,    5}
+  ,{get ,   5}
+  % ,{remove, 1} 
 ]}.
 
 {ttl,      30000}.
-{timeout,   5000}.
-{capacity, 20000}.
+{capacity,  1000}.

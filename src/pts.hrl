@@ -12,7 +12,10 @@
 
 
 %% default timeout
--define(DEF_TIMEOUT,  5000).
+-define(DEF_TIMEOUT,    5000).
+
+%% evict timeout on exceeded capacity quota
+-define(CONFIG_EVICT,  10000).
 
 -ifdef(CONFIG_DEBUG).
    -define(DEBUG(Str, Args), error_logger:info_msg(Str, Args)).
@@ -24,6 +27,7 @@
 %% process buckets record
 -record(pts, {
    name      = undefined :: atom()           % unique name-space id
+  ,lead      = undefined :: pid()            % name space leader
   ,factory   = undefined :: pid()            % process factory or undefined
   ,keylen    = inf       :: integer() | inf  % length of key (key prefix used to distinguish a process)
   ,readonly  = false     :: boolean()        % write operations are disabled
@@ -32,4 +36,5 @@
   ,protocol  = pipe      :: pipe | otp       % communication protocol 
   ,entity                :: any()            % entity specification (for accounting only)
   ,capacity  = inf       :: integer()        % max number of elements
+  ,size      = 0         :: integer()        % number of elements
 }).
