@@ -361,8 +361,8 @@ send(Ns, Key, Msg) ->
 
 fold(Fun, Acc0, #pts{name=Ns}) ->
    pns:fold(
-      fun({Key, _Pid}, Acc) -> 
-         Fun(Key, Acc)
+      fun({Key, Pid}, Acc) -> 
+         Fun(Key, Pid, Acc)
       end, 
       Acc0, 
       Ns
@@ -377,8 +377,8 @@ fold(Fun, Acc0, Ns) ->
 
 foreach(Fun, #pts{name=Ns}) ->
    pns:fold(
-      fun({Key, _Pid}, Acc) -> 
-         Fun(Key), Acc
+      fun({Key, Pid}, Acc) -> 
+         Fun(Key, Pid), Acc
       end, 
       ok, 
       Ns
