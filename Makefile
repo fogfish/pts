@@ -23,6 +23,7 @@ BB   = ../basho_bench
 
 ## erlang flags
 EFLAGS = \
+	-i \
 	-name ${APP}@127.0.0.1 \
 	-setcookie nocookie \
 	-pa ./ebin \

@@ -53,7 +53,8 @@
    cast/3,
    send/3,
    % fold bucket
-   fold/3
+   fold/3,
+   foreach/2
 ]).
 
 -type(pts() :: atom() | #pts{}).
@@ -355,13 +356,13 @@ send(Ns, Key, Msg) ->
    send(ns(Ns), Key, Msg).
    
 %%
-%% fold function Fun(Key, $Value, Acc) over name space
--spec(fold/3 :: (function(), any(), pts()) -> list()).
+%% fold function Fun(Key, Acc) over name space
+-spec(fold/3 :: (function(), any(), pts()) -> any()).
 
-fold(Fun, Acc0, #pts{name=Ns, protocol=Prot}) ->
+fold(Fun, Acc0, #pts{name=Ns}) ->
    pns:fold(
-      fun({Key, Pid}, Acc) -> 
-         Fun(Key, fun() -> pcall(Prot, Pid, {get, Key}, ?DEF_TIMEOUT) end, Acc)
+      fun({Key, _Pid}, Acc) -> 
+         Fun(Key, Acc)
       end, 
       Acc0, 
       Ns
@@ -369,6 +370,22 @@ fold(Fun, Acc0, #pts{name=Ns, protocol=Prot}) ->
 
 fold(Fun, Acc0, Ns) ->
    fold(Fun, Acc0, ns(Ns)).
+
+%%
+%% applies a function to each element for its side-effects.
+-spec(foreach/2 :: (function(), pts()) -> ok).
+
+foreach(Fun, #pts{name=Ns}) ->
+   pns:fold(
+      fun({Key, _Pid}, Acc) -> 
+         Fun(Key), Acc
+      end, 
+      ok, 
+      Ns
+   );
+
+foreach(Fun, Ns) ->
+   foreach(Fun, ns(Ns)).
 
 
 %%-----------------------------------------------------------------------------
