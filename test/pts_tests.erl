@@ -145,7 +145,7 @@ bucket_fold() ->
       lists:seq(1,5)
    ),
    M = pts:fold(
-      fun(K, V, A) -> A + K * V() end, 0, bucket),
+      fun(K, _, A) -> A + K * pts:get(bucket, K) end, 0, bucket),
    M = lists:foldl(
       fun(X, A) -> A + X * X end,
       0,

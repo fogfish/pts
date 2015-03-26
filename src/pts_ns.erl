@@ -44,18 +44,19 @@
 
 %%
 %%
-start_link(Sup, Name, Opts)
+start_link(Factory, Name, Opts)
  when is_atom(Name) ->
-   gen_server:start_link({local, Name}, ?MODULE, [Sup, Name, Opts], []);
+   gen_server:start_link({local, Name}, ?MODULE, [Factory, Name, Opts], []);
 
-start_link(Sup, Name, Opts) ->
-   gen_server:start_link(?MODULE, [Sup, Name, Opts], []).
+start_link(Factory, Name, Opts) ->
+   gen_server:start_link(?MODULE, [Factory, Name, Opts], []).
 
-init([Sup, Name, Opts]) ->
-   self() ! {set_factory, Sup}, % message to itself, to avoid supervisor deadlock
+init([Factory, Name, Opts]) ->
    random:seed(os:timestamp()),
    erlang:send_after(?CONFIG_EVICT, self(), evict),
-   {ok, lists:foldl(fun init/2, #pts{name=Name, lead=self()}, Opts)}.
+	State = lists:foldl(fun init/2, #pts{name=Name, lead=self(), factory=Factory}, Opts),
+	_ = ets:insert(pts, State),
+   {ok, State}.
 
 init({keylen, X}, State) -> 
    State#pts{keylen=X}; 
@@ -99,17 +100,6 @@ handle_cast(_, State) ->
 
 %%
 %%
-handle_info({set_factory, Sup}, State) ->
-   Childs = supervisor:which_children(Sup),
-   case lists:keyfind(pts_entity_sup, 1, Childs) of
-      false ->
-         _ = ets:insert(pts, State),
-         {noreply, State};
-      {pts_entity_sup, Pid, _, _} ->
-         _ = ets:insert(pts, State#pts{factory = Pid}),
-         {noreply, State#pts{factory = Pid}}
-   end;
-
 handle_info(evict, #pts{capacity=inf}=State) ->
    {noreply, State};
 

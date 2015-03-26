@@ -37,15 +37,28 @@
 %%
 %%
 start_link(Name, Opts) ->
-   supervisor:start_link(?MODULE, [Name, Opts]).
+   {ok, Sup} = supervisor:start_link(?MODULE, [Name, Opts]),
+	Factory   = case 
+		lists:keyfind(pts_entity_sup, 1, supervisor:which_children(Sup))
+ 	of
+		false ->
+			undefined;
+		{pts_entity_sup, Pid, _, _} ->
+			Pid
+	end,
+   {ok, _} = supervisor:start_child(Sup,
+		?CHILD(worker, pts_ns, [Factory, Name, Opts])
+	),
+	{ok, Sup}.
    
+
 init([Name, Opts]) ->       
    init(Name, Opts).
 
 init(Name, Opts) ->
    {ok,
       {
-         {one_for_one, 4, 1800}, 
+         {one_for_all, 0, 1}, 
          child(lists:keyfind(factory, 1, Opts), Name, Opts)
       }
    }.
@@ -66,30 +79,25 @@ entity(Opts) ->
 
 %%
 %% create list of child
-child({_, transient}, Name, Opts) ->
+child({_, transient}, _Name, Opts) ->
    {Type, Entity} = entity(Opts),
    [
-      ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
-     ,?CHILD(supervisor, pts_entity_sup, [Type, transient, Entity])
+		?CHILD(supervisor, pts_entity_sup, [Type, transient, Entity])
    ];
 
-child({_, temporary}, Name, Opts) ->
+child({_, temporary}, _Name, Opts) ->
    {Type, Entity} = entity(Opts),
    [
-      ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
-     ,?CHILD(supervisor, pts_entity_sup, [Type, temporary, Entity])
+      ?CHILD(supervisor, pts_entity_sup, [Type, temporary, Entity])
    ];
 
-child({_, permanent}, Name, Opts) ->
+child({_, permanent}, _Name, Opts) ->
    {Type, Entity} = entity(Opts),
    [
-      ?CHILD(worker,     pts_ns,         [self(), Name, Opts])
-     ,?CHILD(supervisor, pts_entity_sup, [Type, permanent, Entity])
+      ?CHILD(supervisor, pts_entity_sup, [Type, permanent, Entity])
    ];
 
-child(_, Name, Opts) ->
+child(_, _Name, _Opts) ->
    %% factory type is not defined 
-   [
-      ?CHILD(worker, pts_ns, [self(), Name, Opts])
-   ].
+   [].
    
