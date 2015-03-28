@@ -144,6 +144,8 @@ ensure(#pts{name=Ns, keylen=Keylen, factory=Sup}=Storage, Key, Args) ->
                {ok, Pid};
             {error, {badarg, {_,_}}} ->
                ensure(Storage, Key, Args);
+            {error, {shutdown, {failed_to_start_child, _, {badarg,{_,_}}}}} ->
+               ensure(Storage, Key, Args);
             {error, Reason} ->
                {error, Reason}
          end;
