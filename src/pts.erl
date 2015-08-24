@@ -19,6 +19,9 @@
 %%  @description
 %%     In-Process Term Storage: the library provides hashtable-like interface 
 %%     to manipulate data distributed through Erlang processes.
+%%
+%%  @todo
+%%     * put / get only if process exists 
 -module(pts).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
