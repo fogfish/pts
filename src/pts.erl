@@ -84,15 +84,15 @@ start() ->
 %%                          processes are created out-side of pts supervisor by application
 %%                          if factory is not defined.
 %%   {protocol, pipe | server} - define ipc protocol (default pipe)
--spec(start_link/2 :: (pts(), list()) -> {ok, pid()} | {error, any()}).
+-spec start_link(pts(), list()) -> {ok, pid()} | {error, any()}.
 
 start_link(Name, Opts) ->
    pts_ns_sup:start_link(Name, Opts).
 
 %%
 %% return meta data for given table
--spec(i/1 :: (pts()) -> list()).
--spec(i/2 :: (atom(), pts()) -> list()).
+-spec i(pts()) -> list().
+-spec i(atom(), pts()) -> list().
 
 i(Ns) ->
    case ns(Ns) of
@@ -115,7 +115,7 @@ i(Prop, Ns) ->
 
 %%
 %% return pid() of processes
--spec(whereis/2 :: (pts(), key()) -> pid() | undefined).
+-spec whereis(pts(), key()) -> pid() | undefined.
 
 whereis(#pts{name=Name, keylen=Keylen}, Key) ->
    pns:whereis(Name, key_to_uid(Key, Keylen));
@@ -125,8 +125,8 @@ whereis(Ns, Key) ->
 %%
 %% ensure process is exists and returns its pid()
 %% process creation is serialized to avoid key collisions
--spec(ensure/2 :: (pts(), key()) -> {ok, pid()} | {error, any()}).
--spec(ensure/3 :: (pts(), key(), list()) -> {ok, pid()} | {error, any()}).
+-spec ensure(pts(), key()) -> {ok, pid()} | {error, any()}.
+-spec ensure(pts(), key(), list()) -> {ok, pid()} | {error, any()}.
 
 ensure(Ns, Key) ->
    ensure(Ns, Key, []).
@@ -160,8 +160,8 @@ ensure(Ns, Key, Args) ->
 
 %%
 %% synchronous put value
--spec(put/3  :: (pts()|pid(), key(), val()) -> ok | {error, any()}).
--spec(put/4  :: (pts()|pid(), key(), val(), timeout()) -> ok | {error, any()}).
+-spec put(pts()|pid(), key(), val()) -> ok | {error, any()}.
+-spec put(pts()|pid(), key(), val(), timeout()) -> ok | {error, any()}.
 
 put(Ns, Key, Val) ->
    pts:put(Ns, Key, Val, ?DEF_TIMEOUT).
@@ -187,8 +187,8 @@ put(Ns, Key, Val, Timeout) ->
 
 %%
 %% asynchronous put value
--spec(put_/3 :: (pts()|pid(), key(), val()) -> reference()).
--spec(put_/4 :: (pts()|pid(), key(), val(), boolean()) -> ok | reference()).
+-spec put_(pts()|pid(), key(), val()) -> reference().
+-spec put_(pts()|pid(), key(), val(), boolean()) -> ok | reference().
 
 put_(Ns, Key, Val) ->
    pts:put_(Ns, Key, Val, true).
@@ -212,8 +212,8 @@ put_(Ns, Key, Val, Flag) ->
 
 %%
 %% synchronous get value
--spec(get/2  :: (atom(), any()) -> any() | {error, any()}).
--spec(get/3  :: (atom(), any(), timeout()) -> any() | {error, any()}).
+-spec get(atom(), any()) -> any() | {error, any()}.
+-spec get(atom(), any(), timeout()) -> any() | {error, any()}.
 
 get(Ns, Key) ->
    pts:get(Ns, Key, ?DEF_TIMEOUT).
@@ -239,8 +239,8 @@ get(Ns, Key, Timeout) ->
 
 %%
 %% asynchronous get value
--spec(get_/2 :: (atom(), any()) -> reference()).
--spec(get_/3 :: (atom(), any(), boolean()) -> ok | reference()).
+-spec get_(atom(), any()) -> reference().
+-spec get_(atom(), any(), boolean()) -> ok | reference().
 
 get_(Ns, Key) ->
    pts:get_(Ns, Key, true).
@@ -264,8 +264,8 @@ get_(Ns, Key, Flags) ->
 
 %%
 %% synchronous remove value
--spec(remove/2  :: (atom(), any()) -> ok | {error, any()}).
--spec(remove/3  :: (atom(), any(), timeout()) -> ok | {error, any()}).
+-spec remove(atom(), any()) -> ok | {error, any()}.
+-spec remove(atom(), any(), timeout()) -> ok | {error, any()}.
 
 remove(Ns, Key) ->
    pts:remove(Ns, Key, ?DEF_TIMEOUT).
@@ -291,8 +291,8 @@ remove(Ns, Key, Timeout) ->
 
 %%
 %% asynchronous remove value
--spec(remove_/2 :: (atom(), any()) -> reference()).
--spec(remove_/3 :: (atom(), any(),boolean()) -> ok | reference()).
+-spec remove_(atom(), any()) -> reference().
+-spec remove_(atom(), any(),boolean()) -> ok | reference().
 
 remove_(Ns, Key) ->
    pts:remove_(Ns, Key, true).
@@ -316,8 +316,8 @@ remove_(Ns, Key, Flags) ->
 
 %%
 %% call process
--spec(call/3 :: (atom(), any(), any()) -> any()).
--spec(call/4 :: (atom(), any(), any(), timeout()) -> any()).
+-spec call(atom(), any(), any()) -> any().
+-spec call(atom(), any(), any(), timeout()) -> any().
 
 call(Ns, Key, Msg) ->
    call(Ns, Key, Msg, ?DEF_TIMEOUT).
@@ -334,7 +334,7 @@ call(Ns, Key, Msg, Timeout) ->
 
 %%
 %% cast message to process
--spec(cast/3 :: (atom(), any(), any()) -> ok).
+-spec cast(atom(), any(), any()) -> ok.
 
 cast(#pts{}=Ns, Key, Msg) ->
    case where_to_read(Ns, Key) of
@@ -348,7 +348,7 @@ cast(Ns, Key, Msg) ->
 
 %%
 %% send message to process
--spec(send/3 :: (atom(), any(), any()) -> ok).
+-spec send(atom(), any(), any()) -> ok.
 
 send(#pts{}=Ns, Key, Msg) ->
    case where_to_read(Ns, Key) of
@@ -362,7 +362,7 @@ send(Ns, Key, Msg) ->
    
 %%
 %% fold function Fun(Key, Acc) over name space
--spec(fold/3 :: (function(), any(), pts()) -> any()).
+-spec fold(function(), any(), pts()) -> any().
 
 fold(Fun, Acc0, #pts{name=Ns}) ->
    pns:fold(
@@ -378,7 +378,7 @@ fold(Fun, Acc0, Ns) ->
 
 %%
 %% applies a function to each element for its side-effects.
--spec(foreach/2 :: (function(), pts()) -> ok).
+-spec foreach(function(), pts()) -> ok.
 
 foreach(Fun, #pts{name=Ns}) ->
    pns:fold(
